@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -31,12 +32,16 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'modeltranslation',
+    'rest_framework',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'users',
+    'tests',
 ]
 
 MIDDLEWARE = [
@@ -102,7 +107,16 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'uz'
+
+LANGUAGES = (
+    ('uz', 'Uzbek'),
+    ('ru', 'Russian'),
+    ('en', 'English'),
+)
+
+MODELTRANSLATION_DEFAULT_LANGUAGE = 'uz'
+MODELTRANSLATION_LANGUAGES = ('uz', 'ru', 'en')
 
 TIME_ZONE = 'UTC'
 
@@ -115,3 +129,12 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+ATMOS_STORE_ID = os.environ.get('ATMOS_STORE_ID', '')
+ATMOS_CONSUMER_KEY = os.environ.get('ATMOS_CONSUMER_KEY', '')
+ATMOS_CONSUMER_SECRET = os.environ.get('ATMOS_CONSUMER_SECRET', '')
+ATMOS_CALLBACK_URL = os.environ.get('ATMOS_CALLBACK_URL', '')
+ATMOS_RETURN_URL = os.environ.get('ATMOS_RETURN_URL', '')
+ATMOS_BASE_URL = os.environ.get('ATMOS_BASE_URL', 'https://partner.atmos.uz')

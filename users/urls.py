@@ -1,0 +1,51 @@
+from django.urls import path
+
+from .views import (
+    AdminStatisticsView,
+    AtmosCallbackView,
+    AtmosOrderCreateView,
+    BotUserLanguageView,
+    BotUserOrdersView,
+    BotUserStatisticsView,
+    BotUserView,
+    SubscriptionPlanListView,
+)
+
+urlpatterns = [
+    path("api/v1/bot/users/", BotUserView.as_view(), name="bot-user-upsert"),
+    path(
+        "api/v1/bot/users/<int:telegram_id>/language/",
+        BotUserLanguageView.as_view(),
+        name="bot-user-language",
+    ),
+    path(
+        "api/v1/bot/users/<int:telegram_id>/statistics/",
+        BotUserStatisticsView.as_view(),
+        name="bot-user-statistics",
+    ),
+    path(
+        "api/v1/bot/users/<int:telegram_id>/orders/",
+        BotUserOrdersView.as_view(),
+        name="bot-user-orders",
+    ),
+    path(
+        "api/v1/subscriptions/plans/",
+        SubscriptionPlanListView.as_view(),
+        name="subscription-plan-list",
+    ),
+    path(
+        "api/v1/payments/atmos/orders/",
+        AtmosOrderCreateView.as_view(),
+        name="atmos-order-create",
+    ),
+    path(
+        "api/v1/payments/atmos/callback/",
+        AtmosCallbackView.as_view(),
+        name="atmos-callback",
+    ),
+    path(
+        "api/v1/admin/statistics/",
+        AdminStatisticsView.as_view(),
+        name="admin-statistics",
+    ),
+]

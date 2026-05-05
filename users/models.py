@@ -1,3 +1,363 @@
-from django.db import models
+from datetime import timedelta
+from uuid import uuid4
 
-# Create your models here.
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.db import models, transaction
+from django.db.models import Q
+from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
+
+
+class TimeStampedModel(models.Model):
+    created_at = models.DateTimeField(_("created at"), auto_now_add=True)
+    updated_at = models.DateTimeField(_("updated at"), auto_now=True)
+
+    class Meta:
+        abstract = True
+
+
+class TelegramUser(TimeStampedModel):
+    class Language(models.TextChoices):
+        UZ = "uz", _("Uzbek")
+        RU = "ru", _("Russian")
+        EN = "en", _("English")
+
+    FREE_TEST_LIMIT = 10
+
+    telegram_id = models.BigIntegerField(_("telegram id"), unique=True, db_index=True)
+    full_name = models.CharField(_("full name"), max_length=255, blank=True)
+    username = models.CharField(_("username"), max_length=255, blank=True)
+    first_name = models.CharField(_("first name"), max_length=255, blank=True)
+    last_name = models.CharField(_("last name"), max_length=255, blank=True)
+    language = models.CharField(
+        _("language"),
+        max_length=2,
+        choices=Language.choices,
+        default=Language.UZ,
+    )
+    is_blocked = models.BooleanField(_("is blocked"), default=False)
+    free_tests_taken = models.PositiveSmallIntegerField(_("free tests taken"), default=0)
+    last_seen_at = models.DateTimeField(_("last seen at"), null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = _("Telegram user")
+        verbose_name_plural = _("Telegram users")
+
+    def __str__(self):
+        display_name = self.full_name or " ".join(
+            filter(None, [self.first_name, self.last_name])
+        ).strip()
+        return display_name or self.username or str(self.telegram_id)
+
+    def has_active_premium(self):
+        now = timezone.now()
+        return self.premium_subscriptions.filter(
+            is_active=True,
+            starts_at__lte=now,
+        ).filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now)).exists()
+
+    def can_take_test(self):
+        if self.is_blocked:
+            return False
+        return self.has_active_premium() or self.free_tests_taken < self.FREE_TEST_LIMIT
+
+    def register_free_test_usage(self):
+        if self.has_active_premium():
+            return
+        if self.free_tests_taken >= self.FREE_TEST_LIMIT:
+            raise ValidationError(_("Free test limit has been reached."))
+        self.free_tests_taken = models.F("free_tests_taken") + 1
+        self.save(update_fields=("free_tests_taken", "updated_at"))
+        self.refresh_from_db(fields=("free_tests_taken",))
+
+    def mark_seen(self):
+        self.last_seen_at = timezone.now()
+        self.save(update_fields=("last_seen_at", "updated_at"))
+
+
+class SubscriptionPlan(TimeStampedModel):
+    class BillingPeriod(models.TextChoices):
+        DAY = "day", _("Day")
+        WEEK = "week", _("Week")
+        MONTH = "month", _("Month")
+        YEAR = "year", _("Year")
+        LIFETIME = "lifetime", _("Lifetime")
+
+    name = models.CharField(_("name"), max_length=120)
+    description = models.TextField(_("description"), blank=True)
+    price = models.DecimalField(_("price"), max_digits=12, decimal_places=2)
+    currency = models.CharField(_("currency"), max_length=3, default="UZS")
+    duration = models.PositiveIntegerField(_("duration"), help_text=_("Duration units."))
+    period = models.CharField(
+        _("period"),
+        max_length=20,
+        choices=BillingPeriod.choices,
+        default=BillingPeriod.MONTH,
+    )
+    is_active = models.BooleanField(_("is active"), default=True)
+    sort_order = models.PositiveSmallIntegerField(_("sort order"), default=0)
+
+    class Meta:
+        ordering = ("sort_order", "price")
+        verbose_name = _("subscription plan")
+        verbose_name_plural = _("subscription plans")
+
+    def __str__(self):
+        return f"{self.name} - {self.price} {self.currency}"
+
+    def get_duration_delta(self):
+        if self.period == self.BillingPeriod.DAY:
+            return timedelta(days=self.duration)
+        if self.period == self.BillingPeriod.WEEK:
+            return timedelta(weeks=self.duration)
+        if self.period == self.BillingPeriod.MONTH:
+            return timedelta(days=30 * self.duration)
+        if self.period == self.BillingPeriod.YEAR:
+            return timedelta(days=365 * self.duration)
+        return None
+
+
+class UserPremiumSubscription(TimeStampedModel):
+    user = models.ForeignKey(
+        TelegramUser,
+        on_delete=models.CASCADE,
+        related_name="premium_subscriptions",
+        verbose_name=_("user"),
+    )
+    plan = models.ForeignKey(
+        SubscriptionPlan,
+        on_delete=models.PROTECT,
+        related_name="premium_subscriptions",
+        verbose_name=_("plan"),
+    )
+    starts_at = models.DateTimeField(_("starts at"), default=timezone.now)
+    expires_at = models.DateTimeField(_("expires at"), null=True, blank=True)
+    is_active = models.BooleanField(_("is active"), default=True)
+    source_order = models.OneToOneField(
+        "AtmosOrder",
+        on_delete=models.SET_NULL,
+        related_name="premium_subscription",
+        null=True,
+        blank=True,
+        verbose_name=_("source order"),
+    )
+
+    class Meta:
+        ordering = ("-starts_at",)
+        verbose_name = _("premium subscription")
+        verbose_name_plural = _("premium subscriptions")
+        indexes = [
+            models.Index(fields=("user", "is_active", "expires_at")),
+        ]
+
+    def __str__(self):
+        return f"{self.user} - {self.plan}"
+
+    @property
+    def is_current(self):
+        now = timezone.now()
+        return self.is_active and self.starts_at <= now and (
+            self.expires_at is None or self.expires_at > now
+        )
+
+
+class AtmosOrder(TimeStampedModel):
+    class Status(models.TextChoices):
+        CREATED = "created", _("Created")
+        PENDING = "pending", _("Pending")
+        PAID = "paid", _("Paid")
+        CANCELED = "canceled", _("Canceled")
+        FAILED = "failed", _("Failed")
+        EXPIRED = "expired", _("Expired")
+
+    user = models.ForeignKey(
+        TelegramUser,
+        on_delete=models.PROTECT,
+        related_name="atmos_orders",
+        verbose_name=_("user"),
+    )
+    plan = models.ForeignKey(
+        SubscriptionPlan,
+        on_delete=models.PROTECT,
+        related_name="atmos_orders",
+        verbose_name=_("plan"),
+    )
+    order_id = models.CharField(_("order id"), max_length=64, unique=True)
+    merchant_order_id = models.CharField(
+        _("merchant order id"),
+        max_length=64,
+        unique=True,
+        blank=True,
+        null=True,
+    )
+    atmos_transaction_id = models.CharField(
+        _("Atmos transaction id"),
+        max_length=128,
+        blank=True,
+        db_index=True,
+    )
+    amount = models.DecimalField(_("amount"), max_digits=12, decimal_places=2)
+    currency = models.CharField(_("currency"), max_length=3, default="UZS")
+    status = models.CharField(
+        _("status"),
+        max_length=20,
+        choices=Status.choices,
+        default=Status.CREATED,
+        db_index=True,
+    )
+    paid_at = models.DateTimeField(_("paid at"), null=True, blank=True)
+    expires_at = models.DateTimeField(_("expires at"), null=True, blank=True)
+    payment_url = models.URLField(_("payment url"), max_length=500, blank=True)
+    request_payload = models.JSONField(_("request payload"), default=dict, blank=True)
+    response_payload = models.JSONField(_("response payload"), default=dict, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = _("Atmos order")
+        verbose_name_plural = _("Atmos orders")
+        indexes = [
+            models.Index(fields=("user", "status")),
+            models.Index(fields=("order_id", "status")),
+        ]
+
+    def __str__(self):
+        return f"{self.merchant_order_id or self.order_id} - {self.amount} {self.currency}"
+
+    def save(self, *args, **kwargs):
+        if not self.order_id:
+            self.order_id = uuid4().hex
+        if not self.merchant_order_id:
+            self.merchant_order_id = self.order_id
+        super().save(*args, **kwargs)
+
+    @property
+    def is_paid(self):
+        return self.status == self.Status.PAID
+
+    def mark_as_paid(self, atmos_transaction_id="", payload=None):
+        with transaction.atomic():
+            now = timezone.now()
+            order = type(self).objects.select_for_update().get(pk=self.pk)
+            if order.status == order.Status.PAID:
+                return order.premium_subscription
+
+            order.status = order.Status.PAID
+            order.paid_at = now
+            if atmos_transaction_id:
+                order.atmos_transaction_id = atmos_transaction_id
+            if payload:
+                order.response_payload = payload
+            order.save(
+                update_fields=(
+                    "status",
+                    "paid_at",
+                    "atmos_transaction_id",
+                    "response_payload",
+                    "updated_at",
+                )
+            )
+
+            active_subscription = (
+                UserPremiumSubscription.objects.filter(
+                    user=order.user,
+                    is_active=True,
+                    starts_at__lte=now,
+                    expires_at__gt=now,
+                )
+                .order_by("-expires_at")
+                .first()
+            )
+            starts_at = active_subscription.expires_at if active_subscription else now
+            duration_delta = order.plan.get_duration_delta()
+            expires_at = None if duration_delta is None else starts_at + duration_delta
+
+            return UserPremiumSubscription.objects.create(
+                user=order.user,
+                plan=order.plan,
+                starts_at=starts_at,
+                expires_at=expires_at,
+                is_active=True,
+                source_order=order,
+            )
+
+    @classmethod
+    def create_for_plan(cls, user, plan):
+        return cls.objects.create(
+            user=user,
+            plan=plan,
+            order_id=uuid4().hex,
+            merchant_order_id=uuid4().hex,
+            amount=plan.price,
+            currency=plan.currency,
+        )
+
+
+class AtmosTransaction(TimeStampedModel):
+    class Status(models.TextChoices):
+        INITIATED = "initiated", _("Initiated")
+        SUCCESS = "success", _("Success")
+        FAILED = "failed", _("Failed")
+        CANCELED = "canceled", _("Canceled")
+        REVERSED = "reversed", _("Reversed")
+
+    order = models.ForeignKey(
+        AtmosOrder,
+        on_delete=models.CASCADE,
+        related_name="transactions",
+        verbose_name=_("order"),
+    )
+    transaction_id = models.CharField(_("transaction id"), max_length=128, db_index=True)
+    status = models.CharField(
+        _("status"),
+        max_length=20,
+        choices=Status.choices,
+        default=Status.INITIATED,
+        db_index=True,
+    )
+    amount = models.DecimalField(_("amount"), max_digits=12, decimal_places=2)
+    currency = models.CharField(_("currency"), max_length=3, default="UZS")
+    provider_payload = models.JSONField(_("provider payload"), default=dict, blank=True)
+    performed_at = models.DateTimeField(_("performed at"), null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = _("Atmos transaction")
+        verbose_name_plural = _("Atmos transactions")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("order", "transaction_id"),
+                name="unique_atmos_transaction_per_order",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=("transaction_id", "status")),
+        ]
+
+    def __str__(self):
+        return f"{self.transaction_id} - {self.status}"
+
+    def mark_as_success(self, payload=None):
+        self.status = self.Status.SUCCESS
+        self.performed_at = timezone.now()
+        if payload:
+            self.provider_payload = payload
+        self.save(
+            update_fields=("status", "performed_at", "provider_payload", "updated_at")
+        )
+        return self.order.mark_as_paid(
+            atmos_transaction_id=self.transaction_id,
+            payload=payload or self.provider_payload,
+        )
+
+
+def get_atmos_config():
+    return {
+        "store_id": settings.ATMOS_STORE_ID,
+        "consumer_key": settings.ATMOS_CONSUMER_KEY,
+        "consumer_secret": settings.ATMOS_CONSUMER_SECRET,
+        "callback_url": settings.ATMOS_CALLBACK_URL,
+        "return_url": settings.ATMOS_RETURN_URL,
+        "base_url": settings.ATMOS_BASE_URL,
+    }
