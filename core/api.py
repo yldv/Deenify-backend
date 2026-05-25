@@ -2,15 +2,14 @@ from django.core.exceptions import ValidationError
 from rest_framework import status
 from rest_framework.response import Response
 
-from core.constants import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES
+from core.languages import normalize_language_code
 from users.models import TelegramUser
 
 
 def get_requested_language(request, user=None):
     if user:
         return user.get_content_language()
-    language = request.headers.get("Accept-Language", DEFAULT_LANGUAGE).split(",", 1)[0].split("-", 1)[0]
-    return language if language in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
+    return normalize_language_code(request.headers.get("Accept-Language"))
 
 
 def get_telegram_user(telegram_id):

@@ -36,6 +36,7 @@ ALLOWED_HOSTS = [
 # Application definition
 
 INSTALLED_APPS = [
+    'jazzmin',
     'modeltranslation',
     'rest_framework',
     'django.contrib.admin',
@@ -44,13 +45,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'users',
-    'tests',
+    'users.apps.UsersConfig',
+    'tests.apps.TestsConfig',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -63,7 +65,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -111,15 +113,37 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = 'uz'
+from django.conf.locale import LANG_INFO
 
-LANGUAGES = (
-    ('uz', 'Uzbek'),
-    ('ru', 'Russian'),
+# modeltranslation uses uz_cy — Django must know this code in LANG_INFO + LANGUAGES
+LANG_INFO.update(
+    {
+        "uz_cy": {
+            "bidi": False,
+            "code": "uz-cy",
+            "name": "Uzbek Cyrillic",
+            "name_local": "Ўзбекча",
+        },
+    }
 )
 
+LANGUAGE_CODE = 'uz'
+
+# modeltranslation: barcha tillar LANGUAGES da bo'lishi kerak (uz_cy — kirill)
+LANGUAGES = (
+    ('uz', "O'zbekcha (lotin)"),
+    ('uz_cy', 'Ўзбекча (kirill)'),
+    ('ru', 'Ruscha'),
+)
+
+# Django 6 rasmiy ro'yxatda uz_cy yo'q; modeltranslation uchun kerak
+SILENCED_SYSTEM_CHECKS = ['translation.E002']
+
+LOCALE_PATHS = [BASE_DIR / 'locale']
+
 MODELTRANSLATION_DEFAULT_LANGUAGE = 'uz'
-MODELTRANSLATION_LANGUAGES = ('uz', 'ru', 'uz_cy')
+MODELTRANSLATION_LANGUAGES = ('uz', 'uz_cy', 'ru')
+MODELTRANSLATION_FALLBACK_LANGUAGES = ('uz', 'ru', 'uz_cy')
 
 TIME_ZONE = 'UTC'
 
@@ -132,8 +156,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATICFILES_DIRS = [BASE_DIR / 'static']
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+from config.jazzmin_settings import JAZZMIN_SETTINGS, JAZZMIN_UI_TWEAKS  # noqa: E402
 
 ATMOS_STORE_ID = os.environ.get('ATMOS_STORE_ID', '')
 ATMOS_CONSUMER_KEY = os.environ.get('ATMOS_CONSUMER_KEY', '')

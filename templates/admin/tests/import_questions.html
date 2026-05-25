@@ -1,0 +1,68 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'admin/css/deenify_admin.css' %}">
+{% endblock %}
+
+{% block bodyclass %}{{ block.super }} deenify-import-page{% endblock %}
+
+{% block content_title %}JSON orqali savollar yuklash{% endblock %}
+
+{% block breadcrumbs %}
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'admin:index' %}">Bosh sahifa</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'admin:tests_test_changelist' %}">Test savollari</a></li>
+        <li class="breadcrumb-item active">JSON yuklash</li>
+    </ol>
+{% endblock %}
+
+{% block content %}
+<div class="col-12 deenify-import-page">
+    <div class="card card-primary card-outline mb-4">
+        <div class="card-header">
+            <h3 class="card-title mb-0"><i class="fas fa-file-import"></i> Qanday yuklash kerak?</h3>
+        </div>
+        <div class="card-body">
+            <ol class="import-steps">
+                <li data-step="1">Namuna faylni yuklab oling yoki o'zingiz JSON tayyorlang.</li>
+                <li data-step="2">JSON faylni tanlang — mavjud savollar yangilanadi, yangilari qo'shiladi.</li>
+                <li data-step="3"><strong>Yuklash va saqlash</strong> tugmasini bosing.</li>
+            </ol>
+
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="form-group mb-4">
+                    <label for="id_json_file"><strong>JSON fayl</strong></label>
+                    <input type="file" name="json_file" id="id_json_file" class="form-control"
+                           accept=".json,application/json" required>
+                    <small class="form-text">Faqat .json — barcha savollar umumiy ro'yxatga qo'shiladi</small>
+                </div>
+                <button type="submit" class="btn btn-success btn-lg">
+                    <i class="fas fa-upload"></i> Yuklash va saqlash
+                </button>
+                <a href="{% url 'admin:tests_test_changelist' %}" class="btn btn-outline-light btn-lg ml-2">Orqaga</a>
+            </form>
+        </div>
+    </div>
+
+    <div class="card card-secondary card-outline">
+        <div class="card-header">
+            <h3 class="card-title mb-0"><i class="fas fa-code"></i> JSON namunasi</h3>
+        </div>
+        <div class="card-body">
+            <p class="hint-list mb-2">
+                Har bir savol: <code>sort_order</code>, <code>level</code> (easy / medium / hard),
+                matnlar <code>uz</code>, <code>uz_cy</code> (kirill, ixtiyoriy — bo'sh bo'lsa lotindan),
+                <code>ru</code>, <code>answers</code> (bitta to'g'ri javob).
+            </p>
+            <pre class="deenify-json-sample"><code>{{ example_json }}</code></pre>
+            <a href="{% static 'admin/examples/quiz_import_example.json' %}" download
+               class="btn btn-primary mt-3">
+                <i class="fas fa-download"></i> Namunani yuklab olish (.json)
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

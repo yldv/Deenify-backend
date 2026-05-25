@@ -1,0 +1,209 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static jazzmin %}
+{% get_jazzmin_ui_tweaks as jazzmin_ui %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'admin/css/deenify_admin.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block bodyclass %}{{ block.super }} dashboard deenify-dashboard{% endblock %}
+
+{% block content_title %}Boshqaruv paneli{% endblock %}
+
+{% block breadcrumbs %}
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'admin:index' %}">Bosh sahifa</a></li>
+        <li class="breadcrumb-item active">Statistika</li>
+    </ol>
+{% endblock %}
+
+{% block content %}
+<div id="content-main" class="deenify-dashboard col-12">
+    {% if dashboard_stats %}
+    {{ dashboard_stats.charts|json_script:"deenify-chart-data" }}
+
+    <h4 class="section-title"><i class="fas fa-chart-line"></i> Asosiy ko'rsatkichlar</h4>
+    <div class="deenify-stat-grid">
+        <div class="deenify-stat-card deenify-stat-card--users">
+            <div class="deenify-stat-card__body">
+                <div class="deenify-stat-card__value">{{ dashboard_stats.total_users }}</div>
+                <p class="deenify-stat-card__label">Foydalanuvchilar</p>
+            </div>
+            <div class="deenify-stat-card__icon"><i class="fas fa-users"></i></div>
+        </div>
+        <div class="deenify-stat-card deenify-stat-card--premium">
+            <div class="deenify-stat-card__body">
+                <div class="deenify-stat-card__value">{{ dashboard_stats.premium_users }}</div>
+                <p class="deenify-stat-card__label">Premium</p>
+            </div>
+            <div class="deenify-stat-card__icon"><i class="fas fa-star"></i></div>
+        </div>
+        <div class="deenify-stat-card deenify-stat-card--questions">
+            <div class="deenify-stat-card__body">
+                <div class="deenify-stat-card__value">{{ dashboard_stats.active_questions }}</div>
+                <p class="deenify-stat-card__label">Faol savollar</p>
+            </div>
+            <div class="deenify-stat-card__icon"><i class="fas fa-book-open"></i></div>
+        </div>
+        <div class="deenify-stat-card deenify-stat-card--answers">
+            <div class="deenify-stat-card__body">
+                <div class="deenify-stat-card__value">{{ dashboard_stats.quiz_answers_today }}</div>
+                <p class="deenify-stat-card__label">Bugungi javoblar</p>
+            </div>
+            <div class="deenify-stat-card__icon"><i class="fas fa-check-circle"></i></div>
+        </div>
+    </div>
+
+    <h4 class="section-title"><i class="fas fa-chart-pie"></i> Grafiklar (oxirgi 7 kun)</h4>
+    <div class="row mb-4">
+        <div class="col-lg-6 mb-3">
+            <div class="card chart-card h-100">
+                <div class="card-header"><i class="fas fa-chart-area"></i> Kunlik test javoblari</div>
+                <div class="chart-wrap"><canvas id="chartAnswers"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-6 mb-3">
+            <div class="card chart-card h-100">
+                <div class="card-header"><i class="fas fa-user-plus"></i> Yangi foydalanuvchilar</div>
+                <div class="chart-wrap"><canvas id="chartUsers"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-6 mb-3">
+            <div class="card chart-card h-100">
+                <div class="card-header"><i class="fas fa-layer-group"></i> Savollar darajasi</div>
+                <div class="chart-wrap"><canvas id="chartLevels"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-6 mb-3">
+            <div class="card chart-card h-100">
+                <div class="card-header"><i class="fas fa-money-bill-wave"></i> To'lov buyurtmalari</div>
+                <div class="chart-wrap"><canvas id="chartOrders"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-lg-4 col-md-6 mb-3">
+            <div class="card card-outline card-success h-100 section-card">
+                <div class="card-header"><i class="fas fa-coins"></i> To'lovlar</div>
+                <div class="card-body">
+                    <p class="mb-1"><strong>To'langan:</strong> {{ dashboard_stats.paid_orders }}</p>
+                    <p class="mb-1"><strong>Xato:</strong> {{ dashboard_stats.failed_orders }}</p>
+                    <p class="mb-1"><strong>Bugungi tushum:</strong> {{ dashboard_stats.today_revenue|floatformat:0 }} so'm</p>
+                    <p class="mb-0"><strong>Jami tushum:</strong> {{ dashboard_stats.total_revenue|floatformat:0 }} so'm</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-3">
+            <div class="card card-outline card-secondary h-100 section-card">
+                <div class="card-header"><i class="fas fa-list-ol"></i> Savollar</div>
+                <div class="card-body">
+                    <p class="mb-1"><strong>Oson:</strong> {{ dashboard_stats.easy_questions }}</p>
+                    <p class="mb-1"><strong>O'rta:</strong> {{ dashboard_stats.medium_questions }}</p>
+                    <p class="mb-0"><strong>Qiyin:</strong> {{ dashboard_stats.hard_questions }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 col-md-12 mb-3">
+            <div class="card card-outline card-primary h-100 section-card">
+                <div class="card-header"><i class="fas fa-tools"></i> Tezkor amallar</div>
+                <div class="card-body">
+                    <p class="mb-2"><strong>Bloklangan:</strong> {{ dashboard_stats.blocked_users }}</p>
+                    <p class="mb-3"><strong>Jami javoblar:</strong> {{ dashboard_stats.quiz_answers_total }}</p>
+                    <a href="{% url 'admin:tests_test_import_json' %}" class="btn btn-primary btn-import-main btn-block">
+                        <i class="fas fa-file-import"></i> JSON dan savollar yuklash
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% get_side_menu using="app_list" as dashboard_list %}
+    {% if dashboard_list %}
+        {% widthratio dashboard_list|length 2 1 as middle %}
+    {% endif %}
+
+    <div class="row">
+        <div class="col-lg-9">
+            <h4 class="section-title"><i class="fas fa-th-large"></i> Boshqaruv bo'limlari</h4>
+            <div class="row">
+                {% for app in dashboard_list %}
+                <div class="col-md-6 mb-3">
+                    <div class="card section-card h-100">
+                        <div class="card-header"><h5 class="m-0">{{ app.name }}</h5></div>
+                        <div class="card-body p-0">
+                            <table class="table table-sm mb-0">
+                                <tbody>
+                                {% for model in app.models %}
+                                    <tr>
+                                        <td class="pl-3">
+                                            {% if model.url %}<a href="{{ model.url }}">{{ model.name }}</a>{% else %}{{ model.name }}{% endif %}
+                                        </td>
+                                        <td class="pr-3 text-nowrap text-right">
+                                            {% if model.add_url %}
+                                                <a href="{{ model.add_url }}" class="btn btn-xs {{ jazzmin_ui.button_classes.success }}">Qo'shish</a>
+                                            {% endif %}
+                                            {% if model.url %}
+                                                <a href="{{ model.url }}" class="btn btn-xs {{ jazzmin_ui.button_classes.info }}">Ochish</a>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="col-lg-3">
+            <div class="card section-card">
+                <div class="card-header"><h5 class="m-0"><i class="fas fa-history"></i> So'nggi harakatlar</h5></div>
+                <div class="card-body">
+                    {% load log %}
+                    {% get_admin_log 6 as admin_log for_user user %}
+                    {% if not admin_log %}
+                        <p class="text-muted mb-0">Hozircha yo'q</p>
+                    {% else %}
+                        <div class="timeline">
+                            {% for entry in admin_log %}
+                                <div class="mb-3">
+                                    {% if entry.is_change %}
+                                        <i class="fas fa-edit text-info"></i>
+                                    {% elif entry.is_deletion %}
+                                        <i class="fas fa-trash text-danger"></i>
+                                    {% elif entry.is_addition %}
+                                        <i class="fas fa-plus-circle text-success"></i>
+                                    {% endif %}
+                                    <span class="text-muted small d-block">{{ entry.action_time|timesince }} oldin</span>
+                                    <strong>
+                                        {% if entry.is_deletion or not entry.get_admin_url %}
+                                            {{ entry.object_repr }}
+                                        {% else %}
+                                            <a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>
+                                        {% endif %}
+                                    </strong>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extrajs %}
+    {{ block.super }}
+    <script src="{% static 'admin/js/deenify_dashboard.js' %}"></script>
+{% endblock %}

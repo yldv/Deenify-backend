@@ -5,7 +5,8 @@ from typing import Any
 
 import aiohttp
 
-from core.constants import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES
+from core.constants import DEFAULT_LANGUAGE
+from core.languages import normalize_language_code
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,7 @@ class BackendApiClient:
 
     @staticmethod
     def _api_language(language: str) -> str:
-        return language if language in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
+        return normalize_language_code(language) or DEFAULT_LANGUAGE
 
     async def get_user(self, *, telegram_id):
         return await self._request("GET", f"/bot/users/{telegram_id}/")

@@ -1,38 +1,13 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from bot.uz_cyrillic import latin_to_cyrillic
-from tests.models import Answer, Test, TestCategory
+from tests.models import Test, TestCategory
 from tests.seed_data.quiz_questions import get_quiz_questions
+from tests.services.quiz_import import import_questions_from_payload
+from tests.services.translation_utils import translated_defaults
 from users.models import SubscriptionPlan
 
 TRANSLATION_LANGS = ("uz", "ru", "uz_cy")
-
-
-def ensure_translations(translations):
-    result = dict(translations)
-    if "uz" in result and "uz_cy" not in result:
-        result["uz_cy"] = latin_to_cyrillic(result["uz"])
-    return result
-
-
-def translated_defaults(model, values):
-    defaults = {}
-    field_names = {field.name for field in model._meta.get_fields()}
-    for field, raw_translations in values.items():
-        
-        translations = ensure_translations(raw_translations)
-        normal_value = translations.get("uz") or translations.get("ru") or ""
-        if field in field_names:
-            defaults[field] = normal_value
-        for language in TRANSLATION_LANGS:
-            value = translations.get(language)
-            if value is None:
-                continue
-            translated_field = f"{field}_{language}"
-            if translated_field in field_names:
-                defaults[translated_field] = value
-    return defaults
 
 
 class Command(BaseCommand):
@@ -42,8 +17,21 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         category = self.seed_default_category()
         self.seed_subscription_plans()
-        count = self.seed_tests(category)
-        self.stdout.write(self.style.SUCCESS(f"Deenify seed: {count} tests upserted."))
+        result = import_questions_from_payload(
+            {
+                "category_slug": category.slug,
+                "deactivate_others": True,
+                "questions": get_quiz_questions(),
+            },
+            category_slug=category.slug,
+            deactivate_others=True,
+        )
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Deenify seed: {result['imported']} tests upserted "
+                f"({result['active_questions']} active)."
+            )
+        )
 
     def seed_default_category(self):
         defaults = {
@@ -119,50 +107,3 @@ class Command(BaseCommand):
                 plan.save(update_fields=tuple(defaults.keys()) + ("updated_at",))
             else:
                 SubscriptionPlan.objects.create(**defaults)
-
-    def seed_tests(self, category):
-        Test.objects.exclude(category=category).update(is_active=False)
-        Test.objects.filter(category=category).update(is_active=False)
-
-        for item in get_quiz_questions():
-            defaults = {
-                "category": category,
-                "level": item["level"],
-                "is_active": True,
-                "is_premium": False,
-                "sort_order": item["sort_order"],
-                **translated_defaults(
-                    Test,
-                    {
-                        "title": item["title"],
-                        "question": item["question"],
-                        "description": item["description"],
-                        "explanation": item["explanation"],
-                    },
-                ),
-            }
-            test, _ = Test.objects.update_or_create(
-                category=category,
-                level=item["level"],
-                sort_order=item["sort_order"],
-                defaults=defaults,
-            )
-            self.seed_answers(test, item["answers"])
-
-        return Test.objects.filter(category=category, is_active=True).count()
-
-    def seed_answers(self, test, answers):
-        test.answers.update(is_correct=False)
-        for index, (is_correct, text) in enumerate(answers, start=1):
-            answer = test.answers.filter(sort_order=index).first()
-            defaults = {
-                "is_correct": is_correct,
-                "sort_order": index,
-                **translated_defaults(Answer, {"text": text}),
-            }
-            if answer:
-                for field, value in defaults.items():
-                    setattr(answer, field, value)
-                answer.save(update_fields=tuple(defaults.keys()) + ("updated_at",))
-            else:
-                Answer.objects.create(test=test, **defaults)

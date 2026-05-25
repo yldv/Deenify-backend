@@ -9,7 +9,7 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 
 from core.constants import SUPPORTED_LANGUAGES
-from tests.models import UserAnsweredTest, UserTestSession
+from tests.models import UserAnsweredTest, UserTestAnswer, UserTestSession
 from tests.quiz_services import get_quiz_progress
 
 from .models import AtmosOrder, AtmosTransaction, SubscriptionPlan, TelegramUser

@@ -1,0 +1,45 @@
+{
+  "questions": [
+    {
+      "sort_order": 1,
+      "level": "easy",
+      "title": {
+        "uz": "Namozlar soni",
+        "uz_cy": "Намозлар сони",
+        "ru": "Число молитв"
+      },
+      "question": {
+        "uz": "Bir kunda necha mahal farz namoz o'qiladi?",
+        "uz_cy": "Бир кунда неча маҳал фарз намоз ўқилади?",
+        "ru": "Сколько обязательных молитв в день?"
+      },
+      "description": {
+        "uz": "📚 Manba: Namuna kitob (1 bob, 5 bet)\n\n✍️ Muallif: Namuna",
+        "uz_cy": "📚 Манба: Намуна китоб (1 боб, 5 бет)\n\n✍️ Муаллиф: Намуна",
+        "ru": "📚 Источник: Пример (гл. 1, стр. 5)\n\n✍️ Автор: Пример"
+      },
+      "explanation": {
+        "uz": "Kuniga besh mahal farz namoz bor.",
+        "ru": "В день пять обязательных молитв."
+      },
+      "answers": [
+        {
+          "is_correct": true,
+          "text": { "uz": "5", "uz_cy": "5", "ru": "5" }
+        },
+        {
+          "is_correct": false,
+          "text": { "uz": "3", "uz_cy": "3", "ru": "3" }
+        },
+        {
+          "is_correct": false,
+          "text": { "uz": "4", "ru": "4" }
+        },
+        {
+          "is_correct": false,
+          "text": { "uz": "7", "ru": "7" }
+        }
+      ]
+    }
+  ]
+}

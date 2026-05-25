@@ -17,6 +17,13 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
+from core.admin_dashboard import patch_admin_index
+
+patch_admin_index()
+admin.site.site_header = "Deenify boshqaruv"
+admin.site.site_title = "Deenify"
+admin.site.index_title = "Statistika va bo'limlar"
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('users.urls')),

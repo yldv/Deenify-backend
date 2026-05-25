@@ -1,0 +1,234 @@
+/* Deenify admin — yorqin sarlavhalar, uyg'un stat kartalar */
+
+.deenify-dashboard .section-title {
+  color: #f1f5f9 !important;
+  font-weight: 700;
+  font-size: 1.15rem;
+  margin-bottom: 1.25rem;
+  letter-spacing: 0.01em;
+}
+
+.deenify-dashboard .section-title i {
+  color: #63b3ed !important;
+  margin-right: 0.35rem;
+}
+
+/* Stat kartalar — bir xil uslub, ikonka o'ngda */
+.deenify-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+.deenify-stat-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.35rem;
+  border-radius: 14px;
+  color: #fff;
+  min-height: 108px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.deenify-stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.deenify-stat-card__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.deenify-stat-card__value {
+  font-size: 2.25rem;
+  font-weight: 800;
+  line-height: 1.1;
+  margin-bottom: 0.25rem;
+}
+
+.deenify-stat-card__label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  opacity: 0.92;
+  margin: 0;
+}
+
+.deenify-stat-card__icon {
+  flex-shrink: 0;
+  width: 3.5rem;
+  height: 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.15);
+  font-size: 1.65rem;
+}
+
+.deenify-stat-card--users {
+  background: linear-gradient(135deg, #2b6cb0 0%, #3182ce 100%);
+}
+
+.deenify-stat-card--premium {
+  background: linear-gradient(135deg, #276749 0%, #38a169 100%);
+}
+
+.deenify-stat-card--questions {
+  background: linear-gradient(135deg, #2c5282 0%, #4299e1 100%);
+}
+
+.deenify-stat-card--answers {
+  background: linear-gradient(135deg, #c05621 0%, #ed8936 100%);
+}
+
+/* Eski small-box yashirish (agar qolsa) */
+.deenify-dashboard .small-box {
+  display: none;
+}
+
+.deenify-dashboard .chart-card {
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+
+.deenify-dashboard .chart-card .card-header {
+  background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
+  color: #f7fafc;
+  font-weight: 600;
+  border: none;
+}
+
+.deenify-dashboard .chart-wrap {
+  position: relative;
+  height: 260px;
+  padding: 1rem;
+  background: #fff;
+}
+
+.deenify-dashboard .section-card {
+  border-radius: 14px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.deenify-dashboard .section-card .card-header {
+  background: #edf2f7;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.deenify-dashboard .btn-import-main {
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+#content-main.deenify-dashboard {
+  padding-top: 0.5rem;
+}
+
+/* JSON import sahifasi */
+.deenify-import-page .card-primary.card-outline {
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.deenify-import-page .card-header {
+  background: linear-gradient(135deg, #2b6cb0 0%, #2c5282 100%);
+  color: #fff;
+}
+
+.deenify-import-page .import-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.5rem;
+}
+
+.deenify-import-page .import-steps li {
+  padding: 0.65rem 0;
+  padding-left: 2rem;
+  position: relative;
+  color: #e2e8f0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.deenify-import-page .import-steps li:last-child {
+  border-bottom: none;
+}
+
+.deenify-import-page .import-steps li::before {
+  content: attr(data-step);
+  position: absolute;
+  left: 0;
+  top: 0.6rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  line-height: 1.4rem;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: #3182ce;
+  color: #fff;
+  border-radius: 50%;
+}
+
+.deenify-import-page label,
+.deenify-import-page .lead {
+  color: #e2e8f0;
+}
+
+.deenify-import-page .form-text {
+  color: #a0aec0 !important;
+}
+
+.deenify-import-page .form-control {
+  background: #2d3748;
+  border-color: #4a5568;
+  color: #f7fafc;
+}
+
+.deenify-import-page .card-secondary .card-header {
+  background: #2d3748;
+  color: #f7fafc;
+}
+
+.deenify-import-page .hint-list {
+  color: #cbd5e0;
+  margin-bottom: 1rem;
+}
+
+.deenify-import-page .hint-list code {
+  background: #4a5568;
+  color: #90cdf4;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+}
+
+.deenify-json-sample {
+  display: block;
+  margin: 0;
+  padding: 1.25rem 1.35rem;
+  max-height: 380px;
+  overflow: auto;
+  border-radius: 10px;
+  background: #1a202c;
+  color: #e2e8f0;
+  border: 1px solid #4a5568;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.deenify-json-sample code {
+  color: inherit;
+  background: transparent;
+  padding: 0;
+}

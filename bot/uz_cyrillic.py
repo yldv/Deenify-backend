@@ -86,20 +86,20 @@ def latin_to_cyrillic(text: str) -> str:
 
 
 def localize_quiz_content(question: dict, language: str) -> dict:
+    """Bot uz_cy: API dan kelgan matn (yoki lotin fallback) → kirill."""
     if language != "uz_cy":
         return question
-    localized = {
-        "id": question["id"],
-        "question": latin_to_cyrillic(question.get("question", "")),
-        "answers": [],
-    }
-    for answer in question.get("answers", []):
-        localized["answers"].append(
-            {
-                "id": answer["id"],
-                "text": latin_to_cyrillic(answer.get("text", "")),
-            }
-        )
+    localized = dict(question)
+    localized["question"] = latin_to_cyrillic(question.get("question", ""))
+    if question.get("description"):
+        localized["description"] = latin_to_cyrillic(question.get("description", ""))
+    localized["answers"] = [
+        {
+            "id": answer["id"],
+            "text": latin_to_cyrillic(answer.get("text", "")),
+        }
+        for answer in question.get("answers", [])
+    ]
     return localized
 
 

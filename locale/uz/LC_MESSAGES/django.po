@@ -1,0 +1,181 @@
+# Deenify admin — O'zbek tili
+msgid ""
+msgstr ""
+"Project-Id-Version: Deenify\n"
+"Language: uz\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "Home"
+msgstr "Bosh sahifa"
+
+msgid "Dashboard"
+msgstr "Boshqaruv paneli"
+
+msgid "Add"
+msgstr "Qo'shish"
+
+msgid "Change"
+msgstr "Tahrirlash"
+
+msgid "View"
+msgstr "Ko'rish"
+
+msgid "Delete"
+msgstr "O'chirish"
+
+msgid "Save"
+msgstr "Saqlash"
+
+msgid "Save and continue editing"
+msgstr "Saqlash va tahrirlashda davom etish"
+
+msgid "Save and add another"
+msgstr "Saqlash va yana qo'shish"
+
+msgid "Save as new"
+msgstr "Yangi sifatida saqlash"
+
+msgid "Delete selected %(verbose_name_plural)s"
+msgstr "Tanlangan %(verbose_name_plural)s ni o'chirish"
+
+msgid "Search"
+msgstr "Qidirish"
+
+msgid "Filter"
+msgstr "Filtr"
+
+msgid "Recent actions"
+msgstr "So'nggi harakatlar"
+
+msgid "None available"
+msgstr "Hozircha yo'q"
+
+msgid "Yes"
+msgstr "Ha"
+
+msgid "No"
+msgstr "Yo'q"
+
+msgid "Unknown"
+msgstr "Noma'lum"
+
+msgid "Log in"
+msgstr "Kirish"
+
+msgid "Log out"
+msgstr "Chiqish"
+
+msgid "Password"
+msgstr "Parol"
+
+msgid "Username"
+msgstr "Login"
+
+msgid "Welcome,"
+msgstr "Xush kelibsiz,"
+
+msgid "View site"
+msgstr "Saytni ko'rish"
+
+msgid "History"
+msgstr "Tarix"
+
+msgid "Authentication and Authorization"
+msgstr "Tizim sozlamalari"
+
+msgid "Users"
+msgstr "Bot foydalanuvchilari"
+
+msgid "Tests"
+msgstr "Test savollari"
+
+msgid "All"
+msgstr "Hammasi"
+
+msgid "Action:"
+msgstr "Amal:"
+
+msgid "Go"
+msgstr "O'tish"
+
+msgid "0 results"
+msgstr "Natija topilmadi"
+
+msgid "%(counter)s result"
+msgid_plural "%(counter)s results"
+msgstr[0] "%(counter)s ta natija"
+
+msgid "Select all"
+msgstr "Hammasini tanlash"
+
+msgid "Clear selection"
+msgstr "Tanlovni tozalash"
+
+msgid "Please correct the errors below."
+msgstr "Quyidagi xatolarni tuzating."
+
+msgid "The %(name)s \"%(obj)s\" was added successfully."
+msgstr "%(name)s \"%(obj)s\" muvaffaqiyatli qo'shildi."
+
+msgid "The %(name)s \"%(obj)s\" was changed successfully."
+msgstr "%(name)s \"%(obj)s\" muvaffaqiyatli yangilandi."
+
+msgid "The %(name)s \"%(obj)s\" was deleted successfully."
+msgstr "%(name)s \"%(obj)s\" muvaffaqiyatli o'chirildi."
+
+msgid "Are you sure?"
+msgstr "Ishonchingiz komilmi?"
+
+msgid "Cancel"
+msgstr "Bekor qilish"
+
+msgid "Submit"
+msgstr "Yuborish"
+
+msgid "Back"
+msgstr "Orqaga"
+
+msgid "Easy"
+msgstr "Oson"
+
+msgid "Medium"
+msgstr "O'rta"
+
+msgid "Hard"
+msgstr "Qiyin"
+
+msgid "Created"
+msgstr "Yaratilgan"
+
+msgid "Pending"
+msgstr "Kutilmoqda"
+
+msgid "Paid"
+msgstr "To'langan"
+
+msgid "Canceled"
+msgstr "Bekor qilingan"
+
+msgid "Failed"
+msgstr "Xato"
+
+msgid "Expired"
+msgstr "Muddati o'tgan"
+
+msgid "ago"
+msgstr "oldin"
+
+msgid "hour"
+msgid_plural "hours"
+msgstr[0] "soat"
+
+msgid "minute"
+msgid_plural "minutes"
+msgstr[0] "daqiqa"
+
+msgid "day"
+msgid_plural "days"
+msgstr[0] "kun"

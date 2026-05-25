@@ -17,7 +17,6 @@ class TelegramUserAdmin(admin.ModelAdmin):
         "username",
         "full_name",
         "phone_number",
-        "first_name",
         "language",
         "quiz_round",
         "free_tests_taken",
@@ -26,11 +25,23 @@ class TelegramUserAdmin(admin.ModelAdmin):
         "created_at",
     )
     list_filter = ("language", "is_blocked", "created_at")
-    search_fields = ("telegram_id", "username", "full_name", "first_name", "last_name")
+    search_fields = ("telegram_id", "username", "full_name", "first_name", "last_name", "phone_number")
     readonly_fields = ("created_at", "updated_at", "last_seen_at")
     list_select_related = ()
+    fieldsets = (
+        (
+            "Telegram",
+            {"fields": ("telegram_id", "username", "full_name", "first_name", "last_name", "language")},
+        ),
+        ("Aloqa", {"fields": ("phone_number",)}),
+        (
+            "Test va cheklovlar",
+            {"fields": ("quiz_round", "free_tests_taken", "is_blocked")},
+        ),
+        ("Vaqt", {"fields": ("created_at", "updated_at", "last_seen_at"), "classes": ("collapse",)}),
+    )
 
-    @admin.display(boolean=True, description="Active premium")
+    @admin.display(boolean=True, description="Premium")
     def has_active_premium(self, obj):
         return obj.has_active_premium()
 

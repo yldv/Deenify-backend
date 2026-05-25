@@ -6,6 +6,7 @@ from bot.api_client import ApiClientError, BlockedUserError, NotFoundError, Paym
 from bot.keyboards import home_keyboard
 from bot.states import TakingTest
 from bot.texts import get_text
+from bot.uz_cyrillic import localize_quiz_content
 from core.constants import API_ROUND_COMPLETE
 
 POLL_QUESTION_LIMIT = 300
@@ -95,6 +96,7 @@ class QuizMessenger:
         progress: dict,
         language: str,
     ) -> bool:
+        question = localize_quiz_content(question, language)
         answers = question.get("answers", [])
         if not answers:
             await state.clear()

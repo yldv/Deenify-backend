@@ -48,9 +48,9 @@ class TestCategory(TimeStampedModel):
 
 class Test(TimeStampedModel):
     class Level(models.TextChoices):
-        EASY = "easy", _("Easy")
-        MEDIUM = "medium", _("Medium")
-        HARD = "hard", _("Hard")
+        EASY = "easy", "Oson"
+        MEDIUM = "medium", "O'rta"
+        HARD = "hard", "Qiyin"
 
     category = models.ForeignKey(
         TestCategory,
