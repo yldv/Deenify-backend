@@ -4,6 +4,7 @@ from .views import (
     AdminStatisticsView,
     AtmosCallbackView,
     AtmosOrderCreateView,
+    BotUserDetailView,
     BotUserLanguageView,
     BotUserOrdersView,
     BotUserStatisticsView,
@@ -13,6 +14,11 @@ from .views import (
 
 urlpatterns = [
     path("api/v1/bot/users/", BotUserView.as_view(), name="bot-user-upsert"),
+    path(
+        "api/v1/bot/users/<int:telegram_id>/",
+        BotUserDetailView.as_view(),
+        name="bot-user-detail",
+    ),
     path(
         "api/v1/bot/users/<int:telegram_id>/language/",
         BotUserLanguageView.as_view(),

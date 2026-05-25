@@ -1,90 +1,72 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
-from .texts import get_text
-
-
-LANGUAGE_BUTTONS = [
-    ("🇺🇿 Uzbek", "lang:uz"),
-    ("🇷🇺 Русский", "lang:ru"),
-    ("🇬🇧 English", "lang:en"),
-]
+from .texts import (
+    LANGUAGE_BUTTON_TEXTS,
+    get_text,
+)
 
 
 def language_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=text, callback_data=callback)]
-            for text, callback in LANGUAGE_BUTTONS
-        ]
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=label)] for label in LANGUAGE_BUTTON_TEXTS],
+        resize_keyboard=True,
+        one_time_keyboard=True,
     )
 
 
-def main_menu_keyboard(language):
+def phone_keyboard(language: str):
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=get_text(language, "share_phone"), request_contact=True)],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+
+
+def home_keyboard(language: str):
     return ReplyKeyboardMarkup(
         keyboard=[
             [
                 KeyboardButton(text=get_text(language, "take_test")),
-                KeyboardButton(text=get_text(language, "profile")),
+                KeyboardButton(text=get_text(language, "restart_from_start")),
             ],
             [
-                KeyboardButton(text=get_text(language, "buy_premium")),
-                KeyboardButton(text=get_text(language, "change_language")),
+                KeyboardButton(text=get_text(language, "help")),
+                KeyboardButton(text=get_text(language, "settings")),
             ],
         ],
         resize_keyboard=True,
+        is_persistent=True,
     )
 
 
-def test_type_keyboard(language):
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text=get_text(language, "easy"), callback_data="test_type:easy"),
-                InlineKeyboardButton(text=get_text(language, "medium"), callback_data="test_type:medium"),
-            ],
-            [
-                InlineKeyboardButton(text=get_text(language, "hard"), callback_data="test_type:hard"),
-                InlineKeyboardButton(text=get_text(language, "mixed"), callback_data="test_type:mixed"),
-            ],
-        ]
+def settings_keyboard(language: str):
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=get_text(language, "change_language"))],
+            [KeyboardButton(text=get_text(language, "back"))],
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
     )
 
 
-def answers_keyboard(answers):
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=answer["text"], callback_data=f"answer:{answer['id']}")]
-            for answer in answers
-        ]
+def help_keyboard(language: str):
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=get_text(language, "help_phone"))],
+            [KeyboardButton(text=get_text(language, "help_message"))],
+            [KeyboardButton(text=get_text(language, "back"))],
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
     )
 
 
-def plans_keyboard(plans):
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text=f"{plan['name']} - {plan['price']}",
-                    callback_data=f"plan:{plan['id']}",
-                )
-            ]
-            for plan in plans
-        ]
-    )
-
-
-def payment_keyboard(payment_url, language):
-    buttons = []
-    if payment_url:
-        buttons.append([InlineKeyboardButton(text=get_text(language, "pay"), url=payment_url)])
-    buttons.append([InlineKeyboardButton(text=get_text(language, "check_premium"), callback_data="check_premium")])
-    buttons.append([InlineKeyboardButton(text=get_text(language, "back_menu"), callback_data="back_menu")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-def back_menu_keyboard(language):
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=get_text(language, "back_menu"), callback_data="back_menu")]
-        ]
+def cancel_keyboard(language: str):
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=get_text(language, "help_cancel"))]],
+        resize_keyboard=True,
+        is_persistent=True,
     )

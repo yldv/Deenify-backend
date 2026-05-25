@@ -20,8 +20,8 @@ class TimeStampedModel(models.Model):
 class TelegramUser(TimeStampedModel):
     class Language(models.TextChoices):
         UZ = "uz", _("Uzbek")
+        UZ_CY = "uz_cy", _("Uzbek Cyrillic")
         RU = "ru", _("Russian")
-        EN = "en", _("English")
 
     FREE_TEST_LIMIT = 10
 
@@ -32,12 +32,14 @@ class TelegramUser(TimeStampedModel):
     last_name = models.CharField(_("last name"), max_length=255, blank=True)
     language = models.CharField(
         _("language"),
-        max_length=2,
+        max_length=5,
         choices=Language.choices,
         default=Language.UZ,
     )
+    phone_number = models.CharField(_("phone number"), max_length=50, blank=True)
     is_blocked = models.BooleanField(_("is blocked"), default=False)
     free_tests_taken = models.PositiveSmallIntegerField(_("free tests taken"), default=0)
+    quiz_round = models.PositiveIntegerField(_("quiz round"), default=1)
     last_seen_at = models.DateTimeField(_("last seen at"), null=True, blank=True)
 
     class Meta:
@@ -75,6 +77,16 @@ class TelegramUser(TimeStampedModel):
     def mark_seen(self):
         self.last_seen_at = timezone.now()
         self.save(update_fields=("last_seen_at", "updated_at"))
+
+    @property
+    def is_registered(self):
+        return bool(self.phone_number)
+
+    def get_content_language(self):
+        """Language code used for translated quiz content from the API."""
+        if self.language in {self.Language.UZ, self.Language.UZ_CY, self.Language.RU}:
+            return self.language
+        return self.Language.UZ
 
 
 class SubscriptionPlan(TimeStampedModel):

@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
@@ -28,6 +29,22 @@ class TestCategory(TimeStampedModel):
     def __str__(self):
         return self.name
 
+    @classmethod
+    def get_default(cls):
+        slug = settings.DEENIFY_QUIZ_DEFAULT_CATEGORY_SLUG
+        category, _ = cls.objects.get_or_create(
+            slug=slug,
+            defaults={
+                "name": "Islom savollari",
+                "name_uz": "Islom savollari",
+                "name_ru": "Исламские вопросы",
+                "description": "",
+                "is_active": True,
+                "sort_order": 0,
+            },
+        )
+        return category
+
 
 class Test(TimeStampedModel):
     class Level(models.TextChoices):
@@ -43,7 +60,16 @@ class Test(TimeStampedModel):
     )
     title = models.CharField(_("title"), max_length=255)
     question = models.TextField(_("question"))
-    explanation = models.TextField(_("explanation"), blank=True)
+    description = models.TextField(
+        _("description"),
+        blank=True,
+        help_text=_("Source citation shown in Telegram quiz poll (not the answer explanation)."),
+    )
+    explanation = models.TextField(
+        _("explanation"),
+        blank=True,
+        help_text=_("Short feedback after the user answers (not shown in the poll)."),
+    )
     level = models.CharField(
         _("level"),
         max_length=10,
@@ -65,6 +91,11 @@ class Test(TimeStampedModel):
 
     def __str__(self):
         return self.title
+
+    def save(self, *args, **kwargs):
+        if not self.category_id:
+            self.category = TestCategory.get_default()
+        super().save(*args, **kwargs)
 
     def get_correct_answer(self):
         return self.answers.filter(is_correct=True).first()
@@ -242,3 +273,35 @@ class UserTestAnswer(TimeStampedModel):
     def save(self, *args, **kwargs):
         self.is_correct = bool(self.selected_answer and self.selected_answer.is_correct)
         super().save(*args, **kwargs)
+
+
+class UserAnsweredTest(TimeStampedModel):
+    user = models.ForeignKey(
+        "users.TelegramUser",
+        on_delete=models.CASCADE,
+        related_name="answered_tests",
+        verbose_name=_("user"),
+    )
+    test = models.ForeignKey(
+        Test,
+        on_delete=models.CASCADE,
+        related_name="user_completions",
+        verbose_name=_("test"),
+    )
+    round = models.PositiveIntegerField(_("round"), default=1, db_index=True)
+
+    class Meta:
+        verbose_name = _("user answered test")
+        verbose_name_plural = _("user answered tests")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "test", "round"),
+                name="unique_user_test_per_round",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=("user", "round")),
+        ]
+
+    def __str__(self):
+        return f"{self.user} - {self.test} (round {self.round})"

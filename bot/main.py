@@ -18,7 +18,12 @@ async def main():
     dispatcher.include_router(setup_routers())
 
     api_client = BackendApiClient(base_url=config.backend_base_url)
-    await dispatcher.start_polling(bot, api_client=api_client)
+    await dispatcher.start_polling(
+        bot,
+        api_client=api_client,
+        bot_config=config,
+        allowed_updates=dispatcher.resolve_used_update_types(),
+    )
 
 
 if __name__ == "__main__":

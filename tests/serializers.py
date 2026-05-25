@@ -1,60 +1,60 @@
+import random
+
 from rest_framework import serializers
 
-from .models import Answer, Test, TestCategory, UserTestSession
+from .models import Answer, Test
 
 
-class TestCategorySerializer(serializers.ModelSerializer):
-    order = serializers.IntegerField(source="sort_order")
-
-    class Meta:
-        model = TestCategory
-        fields = ("id", "name", "slug", "order")
-
-
-class AnswerPublicSerializer(serializers.ModelSerializer):
+class BotQuizAnswerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Answer
         fields = ("id", "text")
 
 
-class TestQuestionSerializer(serializers.ModelSerializer):
-    answers = AnswerPublicSerializer(many=True, read_only=True)
+class BotQuizQuestionSerializer(serializers.ModelSerializer):
+    answers = BotQuizAnswerSerializer(many=True, read_only=True)
+    description = serializers.CharField(read_only=True)
+    correct_option_index = serializers.SerializerMethodField()
 
     class Meta:
         model = Test
-        fields = ("id", "question", "answers")
+        fields = ("id", "question", "answers", "description", "correct_option_index")
+
+    def get_correct_option_index(self, obj):
+        for index, answer in enumerate(obj.answers.all()):
+            if answer.is_correct:
+                return index
+        return 0
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        answers = list(data.get("answers", []))
+        if len(answers) < 2:
+            return data
+
+        correct_id = next(
+            (answer.id for answer in instance.answers.all() if answer.is_correct),
+            None,
+        )
+        random.shuffle(answers)
+        data["answers"] = answers
+        if correct_id is not None:
+            data["correct_option_index"] = next(
+                (index for index, item in enumerate(answers) if item["id"] == correct_id),
+                0,
+            )
+        return data
 
 
-class StartSessionSerializer(serializers.Serializer):
+class QuizTelegramIdSerializer(serializers.Serializer):
     telegram_id = serializers.IntegerField()
-    test_type = serializers.ChoiceField(choices=("easy", "medium", "hard", "mixed"))
 
 
-class StartSessionResponseSerializer(serializers.Serializer):
-    session_id = serializers.IntegerField()
-    test_type = serializers.CharField()
-    total_questions = serializers.IntegerField()
-    questions = TestQuestionSerializer(many=True)
-
-
-class SubmitAnswerSerializer(serializers.Serializer):
+class QuizAnswerSerializer(serializers.Serializer):
     telegram_id = serializers.IntegerField()
     test_id = serializers.IntegerField()
     answer_id = serializers.IntegerField()
 
 
-class FinishSessionSerializer(serializers.Serializer):
+class QuizRestartSerializer(serializers.Serializer):
     telegram_id = serializers.IntegerField()
-
-
-class SessionStatsSerializer(serializers.ModelSerializer):
-    score_percent = serializers.IntegerField()
-
-    class Meta:
-        model = UserTestSession
-        fields = (
-            "total_questions",
-            "correct_answers",
-            "wrong_answers",
-            "score_percent",
-        )

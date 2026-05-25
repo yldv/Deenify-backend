@@ -10,7 +10,7 @@ class TestCategoryTranslationOptions(TranslationOptions):
 
 @register(Test)
 class TestTranslationOptions(TranslationOptions):
-    fields = ("title", "question", "explanation")
+    fields = ("title", "question", "description", "explanation")
 
 
 @register(Answer)

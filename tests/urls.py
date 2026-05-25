@@ -1,31 +1,17 @@
 from django.urls import path
 
 from .views import (
-    FinishSessionView,
-    StartTestSessionView,
-    SubmitAnswerView,
-    TestCategoryListView,
+    QuizAnswerView,
+    QuizNextQuestionView,
+    QuizProgressView,
+    QuizResetView,
+    QuizRestartView,
 )
 
 urlpatterns = [
-    path(
-        "api/v1/tests/categories/",
-        TestCategoryListView.as_view(),
-        name="test-category-list",
-    ),
-    path(
-        "api/v1/tests/sessions/start/",
-        StartTestSessionView.as_view(),
-        name="test-session-start",
-    ),
-    path(
-        "api/v1/tests/sessions/<int:session_id>/answer/",
-        SubmitAnswerView.as_view(),
-        name="test-session-answer",
-    ),
-    path(
-        "api/v1/tests/sessions/<int:session_id>/finish/",
-        FinishSessionView.as_view(),
-        name="test-session-finish",
-    ),
+    path("api/v1/quiz/progress/", QuizProgressView.as_view(), name="quiz-progress"),
+    path("api/v1/quiz/next/", QuizNextQuestionView.as_view(), name="quiz-next"),
+    path("api/v1/quiz/answer/", QuizAnswerView.as_view(), name="quiz-answer"),
+    path("api/v1/quiz/restart/", QuizRestartView.as_view(), name="quiz-restart"),
+    path("api/v1/quiz/reset/", QuizResetView.as_view(), name="quiz-reset"),
 ]

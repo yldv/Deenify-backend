@@ -8,12 +8,14 @@ from django.db import transaction
 from django.db.models import Q, Sum
 from django.utils import timezone
 
-from tests.models import UserTestAnswer, UserTestSession
+from core.constants import SUPPORTED_LANGUAGES
+from tests.models import UserAnsweredTest, UserTestSession
+from tests.quiz_services import get_quiz_progress
 
 from .models import AtmosOrder, AtmosTransaction, SubscriptionPlan, TelegramUser
 
 
-VALID_LANGUAGES = {"uz", "ru", "en"}
+VALID_LANGUAGES = SUPPORTED_LANGUAGES
 
 
 def split_full_name(full_name):
@@ -25,20 +27,40 @@ def split_full_name(full_name):
     return parts[0], parts[1]
 
 
-def upsert_telegram_user(*, telegram_id, full_name="", username="", language="uz"):
+def upsert_telegram_user(
+    *,
+    telegram_id,
+    full_name="",
+    username="",
+    language="uz",
+    phone_number="",
+):
     first_name, last_name = split_full_name(full_name)
     defaults = {
         "full_name": full_name or "",
         "username": username or "",
-        "language": language,
+        "language": language if language in VALID_LANGUAGES else "uz",
         "first_name": first_name,
         "last_name": last_name,
         "last_seen_at": timezone.now(),
     }
-    user, _ = TelegramUser.objects.update_or_create(
+    if phone_number:
+        defaults["phone_number"] = phone_number
+
+    user, created = TelegramUser.objects.get_or_create(
         telegram_id=telegram_id,
         defaults=defaults,
     )
+    if not created:
+        update_fields = []
+        for field, value in defaults.items():
+            if field == "phone_number" and not phone_number:
+                continue
+            if getattr(user, field) != value:
+                setattr(user, field, value)
+                update_fields.append(field)
+        if update_fields:
+            user.save(update_fields=update_fields + ["updated_at"])
     return user
 
 
@@ -53,21 +75,11 @@ def get_user_premium_until(user):
 
 
 def get_user_statistics(user):
-    answers = UserTestAnswer.objects.filter(session__user=user)
-    total_answers = answers.count()
-    correct_answers = answers.filter(is_correct=True).count()
-    wrong_answers = total_answers - correct_answers
-    score_percent = round((correct_answers / total_answers) * 100) if total_answers else 0
-
+    progress = get_quiz_progress(user)
     return {
-        "total_sessions": UserTestSession.objects.filter(user=user).count(),
-        "total_answers": total_answers,
-        "correct_answers": correct_answers,
-        "wrong_answers": wrong_answers,
-        "score_percent": score_percent,
-        "free_tests_used": user.free_tests_taken,
-        "is_premium": user.has_active_premium(),
+        **progress,
         "premium_until": get_user_premium_until(user),
+        "total_completions": UserAnsweredTest.objects.filter(user=user).count(),
     }
 
 

@@ -15,11 +15,19 @@ if load_dotenv:
 class BotConfig:
     bot_token: str
     backend_base_url: str
+    support_phone: str
+    admin_ids: tuple[int, ...]
 
 
 def load_config() -> BotConfig:
     bot_token = os.environ.get("BOT_TOKEN", "").strip()
     backend_base_url = os.environ.get("BACKEND_BASE_URL", "").strip().rstrip("/")
+    support_phone = os.environ.get("SUPPORT_PHONE", "").strip()
+    admin_ids = tuple(
+        int(item.strip())
+        for item in os.environ.get("ADMIN_IDS", "").split(",")
+        if item.strip().isdigit()
+    )
 
     if not bot_token:
         raise RuntimeError("BOT_TOKEN is required.")
@@ -29,4 +37,6 @@ def load_config() -> BotConfig:
     return BotConfig(
         bot_token=bot_token,
         backend_base_url=backend_base_url,
+        support_phone=support_phone,
+        admin_ids=admin_ids,
     )

@@ -5,6 +5,8 @@ from typing import Any
 
 import aiohttp
 
+from core.constants import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES
+
 logger = logging.getLogger(__name__)
 
 
@@ -112,7 +114,22 @@ class BackendApiClient:
             raise NotFoundError(message, **kwargs)
         raise ApiClientError(message, **kwargs)
 
-    async def get_or_create_user(self, *, telegram_id, full_name, username, language):
+    @staticmethod
+    def _api_language(language: str) -> str:
+        return language if language in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
+
+    async def get_user(self, *, telegram_id):
+        return await self._request("GET", f"/bot/users/{telegram_id}/")
+
+    async def get_or_create_user(
+        self,
+        *,
+        telegram_id,
+        full_name="",
+        username="",
+        language="uz",
+        phone_number="",
+    ):
         return await self._request(
             "POST",
             "/bot/users/",
@@ -121,6 +138,7 @@ class BackendApiClient:
                 "full_name": full_name,
                 "username": username or "",
                 "language": language,
+                "phone_number": phone_number,
             },
         )
 
@@ -131,63 +149,37 @@ class BackendApiClient:
             json={"language": language},
         )
 
-    async def get_statistics(self, *, telegram_id):
-        return await self._request("GET", f"/bot/users/{telegram_id}/statistics/")
-
-    async def get_categories(self, *, language="uz"):
+    async def get_quiz_next(self, *, telegram_id, language="uz"):
         return await self._request(
             "GET",
-            "/tests/categories/",
-            headers={"Accept-Language": language},
+            "/quiz/next/",
+            params={"telegram_id": telegram_id},
+            headers={"Accept-Language": self._api_language(language)},
         )
 
-    async def start_test_session(self, *, telegram_id, test_type, language="uz"):
+    async def submit_quiz_answer(self, *, telegram_id, test_id, answer_id, language="uz"):
         return await self._request(
             "POST",
-            "/tests/sessions/start/",
-            json={"telegram_id": telegram_id, "test_type": test_type},
-            headers={"Accept-Language": language},
-        )
-
-    async def submit_answer(self, *, session_id, telegram_id, test_id, answer_id, language="uz"):
-        data = await self._request(
-            "POST",
-            f"/tests/sessions/{session_id}/answer/",
+            "/quiz/answer/",
             json={
                 "telegram_id": telegram_id,
                 "test_id": test_id,
                 "answer_id": answer_id,
             },
-            headers={"Accept-Language": language},
+            headers={"Accept-Language": self._api_language(language)},
         )
-        if "session_stats" not in data and "session" in data:
-            data["session_stats"] = data["session"]
-        return data
 
-    async def finish_session(self, *, session_id, telegram_id):
+    async def restart_quiz_round(self, *, telegram_id):
         return await self._request(
             "POST",
-            f"/tests/sessions/{session_id}/finish/",
+            "/quiz/restart/",
             json={"telegram_id": telegram_id},
         )
 
-    async def get_subscription_plans(self, *, language="uz"):
-        return await self._request(
-            "GET",
-            "/subscriptions/plans/",
-            headers={"Accept-Language": language},
-        )
-
-    async def create_atmos_order(self, *, telegram_id, plan_id):
+    async def reset_quiz_progress(self, *, telegram_id):
         return await self._request(
             "POST",
-            "/payments/atmos/orders/",
-            json={"telegram_id": telegram_id, "plan_id": plan_id},
+            "/quiz/reset/",
+            json={"telegram_id": telegram_id},
         )
 
-    async def get_orders(self, *, telegram_id, language="uz"):
-        return await self._request(
-            "GET",
-            f"/bot/users/{telegram_id}/orders/",
-            headers={"Accept-Language": language},
-        )

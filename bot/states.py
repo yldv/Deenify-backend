@@ -5,13 +5,18 @@ class ChoosingLanguage(StatesGroup):
     language = State()
 
 
-class ChoosingTestType(StatesGroup):
-    test_type = State()
+class RegistrationState(StatesGroup):
+    waiting_for_phone = State()
+
+
+class SettingsState(StatesGroup):
+    menu = State()
+
+
+class HelpState(StatesGroup):
+    menu = State()
+    waiting_for_message = State()
 
 
 class TakingTest(StatesGroup):
     answering = State()
-
-
-class ChoosingPlan(StatesGroup):
-    plan = State()

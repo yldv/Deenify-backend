@@ -9,6 +9,7 @@ class TelegramUserUpsertSerializer(serializers.Serializer):
     full_name = serializers.CharField(required=False, allow_blank=True, max_length=255)
     username = serializers.CharField(required=False, allow_blank=True, max_length=255)
     language = serializers.ChoiceField(choices=TelegramUser.Language.choices, default="uz")
+    phone_number = serializers.CharField(required=False, allow_blank=True, max_length=50)
 
 
 class TelegramUserLanguageSerializer(serializers.Serializer):
@@ -20,6 +21,7 @@ class TelegramUserSerializer(serializers.ModelSerializer):
     is_premium = serializers.SerializerMethodField()
     premium_until = serializers.SerializerMethodField()
     can_take_test = serializers.SerializerMethodField()
+    is_registered = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = TelegramUser
@@ -28,11 +30,14 @@ class TelegramUserSerializer(serializers.ModelSerializer):
             "telegram_id",
             "full_name",
             "username",
+            "phone_number",
             "language",
+            "quiz_round",
             "free_tests_used",
             "is_premium",
             "premium_until",
             "can_take_test",
+            "is_registered",
         )
 
     def get_is_premium(self, obj):

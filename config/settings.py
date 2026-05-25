@@ -13,6 +13,10 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -20,13 +24,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-e)0yz7u3srzmgeoc@_7tc6(gor$^zcip)ubxd%z)_%@u0w-dju'
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = []
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key")
+DEBUG = os.getenv("DEBUG", "True") == "True"
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+    if host.strip()
+]
 
 
 # Application definition
@@ -112,11 +116,10 @@ LANGUAGE_CODE = 'uz'
 LANGUAGES = (
     ('uz', 'Uzbek'),
     ('ru', 'Russian'),
-    ('en', 'English'),
 )
 
 MODELTRANSLATION_DEFAULT_LANGUAGE = 'uz'
-MODELTRANSLATION_LANGUAGES = ('uz', 'ru', 'en')
+MODELTRANSLATION_LANGUAGES = ('uz', 'ru', 'uz_cy')
 
 TIME_ZONE = 'UTC'
 
@@ -138,3 +141,12 @@ ATMOS_CONSUMER_SECRET = os.environ.get('ATMOS_CONSUMER_SECRET', '')
 ATMOS_CALLBACK_URL = os.environ.get('ATMOS_CALLBACK_URL', '')
 ATMOS_RETURN_URL = os.environ.get('ATMOS_RETURN_URL', '')
 ATMOS_BASE_URL = os.environ.get('ATMOS_BASE_URL', 'https://partner.atmos.uz')
+
+# Quiz (Telegram bot round-based flow)
+DEENIFY_QUIZ_DEFAULT_CATEGORY_SLUG = os.environ.get('DEENIFY_QUIZ_DEFAULT_CATEGORY_SLUG', 'islam')
+DEENIFY_QUIZ_FIRST_ROUND_EASY_COUNT = int(
+    os.environ.get('DEENIFY_QUIZ_FIRST_ROUND_EASY_COUNT', '10')
+)
+DEENIFY_QUIZ_SUBSCRIPTION_REQUIRED = (
+    os.environ.get('DEENIFY_QUIZ_SUBSCRIPTION_REQUIRED', 'False') == 'True'
+)
