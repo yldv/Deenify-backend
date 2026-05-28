@@ -1,5 +1,4 @@
 from django.contrib import admin
-from modeltranslation.admin import TranslationAdmin
 
 from .models import (
     AtmosOrder,
@@ -27,7 +26,6 @@ class TelegramUserAdmin(admin.ModelAdmin):
     list_filter = ("language", "is_blocked", "created_at")
     search_fields = ("telegram_id", "username", "full_name", "first_name", "last_name", "phone_number")
     readonly_fields = ("created_at", "updated_at", "last_seen_at")
-    list_select_related = ()
     fieldsets = (
         (
             "Telegram",
@@ -47,11 +45,27 @@ class TelegramUserAdmin(admin.ModelAdmin):
 
 
 @admin.register(SubscriptionPlan)
-class SubscriptionPlanAdmin(TranslationAdmin):
+class SubscriptionPlanAdmin(admin.ModelAdmin):
     list_display = ("name", "price", "currency", "duration", "period", "is_active")
     list_filter = ("period", "is_active", "currency")
-    search_fields = ("name",)
+    search_fields = ("name", "name_uz", "name_ru")
     ordering = ("sort_order", "price")
+    fieldsets = (
+        (
+            "Narx va muddat",
+            {"fields": ("price", "currency", "duration", "period", "is_active", "sort_order")},
+        ),
+        ("O'zbekcha (lotin)", {"fields": ("name_uz", "description_uz"), "classes": ("deenify-fs-uz",)}),
+        ("Ўzbekcha (kirill)", {"fields": ("name_uz_cy", "description_uz_cy"), "classes": ("deenify-fs-uz-cy",)}),
+        ("Ruscha", {"fields": ("name_ru", "description_ru"), "classes": ("deenify-fs-ru",)}),
+    )
+
+    def save_model(self, request, obj, form, change):
+        if obj.name_uz and not obj.name:
+            obj.name = obj.name_uz
+        if obj.description_uz and not obj.description:
+            obj.description = obj.description_uz
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(UserPremiumSubscription)
@@ -62,7 +76,7 @@ class UserPremiumSubscriptionAdmin(admin.ModelAdmin):
     readonly_fields = ("created_at", "updated_at")
     autocomplete_fields = ("user", "plan", "source_order")
 
-    @admin.display(boolean=True, description="Current")
+    @admin.display(boolean=True, description="Joriy")
     def is_current(self, obj):
         return obj.is_current
 

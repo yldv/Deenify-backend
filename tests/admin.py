@@ -3,32 +3,33 @@ from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
 from django.utils.html import format_html
-from modeltranslation.admin import TranslationAdmin, TranslationTabularInline
 
-from tests.models import Answer, Test, TestCategory, UserAnsweredTest, UserTestAnswer, UserTestSession
+from tests.models import Answer, Test, TestCategory, UserAnsweredTest
 from tests.services.quiz_import import import_questions_from_payload, parse_json_payload
 
-
-class DeenifyTranslationAdmin(TranslationAdmin):
-    """O'zbekcha (lotin), Ўзбекcha (kirill), Ruscha — uchala til."""
-
-    def formfield_for_dbfield(self, db_field, request, **kwargs):
-        field = super().formfield_for_dbfield(db_field, request, **kwargs)
-        if db_field.name.endswith("_uz_cy"):
-            field.help_text = "Ўзбекcha (kirill). Bo'sh qoldirsangiz, importda lotindan to'ldiriladi."
-        return field
+TRANSLATED_TEST_FIELDS = ("title", "question", "description", "explanation")
 
 
-class AnswerInline(TranslationTabularInline):
+def _language_fieldset(label: str, css_class: str, suffix: str) -> tuple:
+    return (
+        label,
+        {
+            "classes": (css_class,),
+            "fields": tuple(f"{name}_{suffix}" for name in TRANSLATED_TEST_FIELDS),
+        },
+    )
+
+
+class AnswerInline(admin.TabularInline):
     model = Answer
     extra = 4
-    fields = ("text", "is_correct", "sort_order")
+    fields = ("sort_order", "is_correct", "text_uz", "text_uz_cy", "text_ru")
     verbose_name = "Javob"
-    verbose_name_plural = "Javoblar"
+    verbose_name_plural = "Javoblar (lotin, kirill, rus — bitta to'g'ri belgilang)"
 
 
 @admin.register(Test)
-class TestAdmin(DeenifyTranslationAdmin):
+class TestAdmin(admin.ModelAdmin):
     change_list_template = "admin/tests/test_change_list.html"
     list_display = (
         "title",
@@ -39,39 +40,29 @@ class TestAdmin(DeenifyTranslationAdmin):
         "answers_count",
     )
     list_filter = ("level", "is_active", "is_premium")
-    search_fields = ("title", "question", "description")
+    search_fields = (
+        "title",
+        "title_uz",
+        "title_uz_cy",
+        "title_ru",
+        "question",
+        "question_uz",
+        "description",
+        "description_uz",
+    )
     list_editable = ("is_active", "sort_order")
     ordering = ("sort_order", "id")
     inlines = (AnswerInline,)
     fieldsets = (
         (
-            "Asosiy",
+            "Sozlamalar",
             {
-                "description": (
-                    "Yuqoridagi tillar: <strong>O'zbekcha (lotin)</strong>, "
-                    "<strong>Ўзбекcha (kirill)</strong>, <strong>Ruscha</strong>. "
-                    "Bot foydalanuvchi tiliga qarab shu matnlarni yuboradi."
-                ),
-                "fields": (
-                    "title",
-                    "question",
-                    "level",
-                    "sort_order",
-                    "is_active",
-                    "is_premium",
-                ),
+                "fields": ("level", "sort_order", "is_active", "is_premium"),
             },
         ),
-        (
-            "Manba va tushuntirish",
-            {
-                "description": (
-                    "«Tavsif» — Telegram poll ostidagi Manba matni. "
-                    "«Tushuntirish» — javobdan keyin (botda alohida ko'rsatilmaydi)."
-                ),
-                "fields": ("description", "explanation"),
-            },
-        ),
+        _language_fieldset("O'zbekcha (lotin)", "deenify-fs-uz", "uz"),
+        _language_fieldset("Ўzbekcha (kirill)", "deenify-fs-uz-cy", "uz_cy"),
+        _language_fieldset("Ruscha", "deenify-fs-ru", "ru"),
     )
 
     @admin.display(description="Daraja")
@@ -94,7 +85,22 @@ class TestAdmin(DeenifyTranslationAdmin):
 
     def save_model(self, request, obj, form, change):
         obj.category = TestCategory.get_default()
+        for field in TRANSLATED_TEST_FIELDS:
+            uz_value = getattr(obj, f"{field}_uz", None) or ""
+            if uz_value and not getattr(obj, field, None):
+                setattr(obj, field, uz_value)
         super().save_model(request, obj, form, change)
+
+    def save_formset(self, request, form, formset, change):
+        instances = formset.save(commit=False)
+        for instance in instances:
+            if isinstance(instance, Answer):
+                if instance.text_uz and not instance.text:
+                    instance.text = instance.text_uz
+            instance.save()
+        for obj in formset.deleted_objects:
+            obj.delete()
+        formset.save_m2m()
 
     def get_urls(self):
         urls = super().get_urls()
@@ -159,15 +165,26 @@ class TestAdmin(DeenifyTranslationAdmin):
 
 
 @admin.register(Answer)
-class AnswerAdmin(DeenifyTranslationAdmin):
+class AnswerAdmin(admin.ModelAdmin):
     list_display = ("text_short", "test", "is_correct", "sort_order")
     list_filter = ("is_correct", "test__level")
-    search_fields = ("text", "test__title")
+    search_fields = ("text", "text_uz", "test__title")
     autocomplete_fields = ("test",)
+    fieldsets = (
+        ("Savol", {"fields": ("test", "sort_order", "is_correct")}),
+        ("O'zbekcha (lotin)", {"fields": ("text_uz",)}),
+        ("Ўzbekcha (kirill)", {"fields": ("text_uz_cy",)}),
+        ("Ruscha", {"fields": ("text_ru",)}),
+    )
+
+    def save_model(self, request, obj, form, change):
+        if obj.text_uz and not obj.text:
+            obj.text = obj.text_uz
+        super().save_model(request, obj, form, change)
 
     @admin.display(description="Matn")
     def text_short(self, obj):
-        text = obj.text or ""
+        text = obj.text_uz or obj.text or ""
         return text[:80] + "…" if len(text) > 80 else text
 
 
@@ -178,45 +195,3 @@ class UserAnsweredTestAdmin(admin.ModelAdmin):
     search_fields = ("user__telegram_id", "test__title")
     autocomplete_fields = ("user", "test")
     readonly_fields = ("created_at", "updated_at")
-
-
-class UserTestAnswerInline(admin.TabularInline):
-    model = UserTestAnswer
-    extra = 0
-    readonly_fields = ("test", "selected_answer", "is_correct", "answered_at")
-    can_delete = False
-
-
-@admin.register(UserTestSession)
-class UserTestSessionAdmin(admin.ModelAdmin):
-    list_display = (
-        "user",
-        "level",
-        "status",
-        "total_questions",
-        "correct_answers",
-        "wrong_answers",
-        "score_percent",
-        "started_at",
-    )
-    list_filter = ("status", "level", "started_at")
-    search_fields = ("user__telegram_id", "user__username")
-    readonly_fields = (
-        "total_questions",
-        "correct_answers",
-        "started_at",
-        "completed_at",
-        "created_at",
-        "updated_at",
-    )
-    autocomplete_fields = ("user",)
-    inlines = (UserTestAnswerInline,)
-
-
-@admin.register(UserTestAnswer)
-class UserTestAnswerAdmin(admin.ModelAdmin):
-    list_display = ("session", "test", "selected_answer", "is_correct", "answered_at")
-    list_filter = ("is_correct", "test__level", "answered_at")
-    search_fields = ("session__user__telegram_id", "test__title")
-    readonly_fields = ("is_correct", "answered_at", "created_at", "updated_at")
-    autocomplete_fields = ("session", "test", "selected_answer")

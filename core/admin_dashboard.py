@@ -83,8 +83,7 @@ def get_chart_data() -> dict:
 
 
 def get_dashboard_statistics() -> dict:
-    now = timezone.now()
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today = timezone.localdate()
     stats = get_admin_statistics()
     active_tests = Test.objects.filter(is_active=True)
     stats.update(
@@ -94,7 +93,7 @@ def get_dashboard_statistics() -> dict:
             "medium_questions": active_tests.filter(level=Test.Level.MEDIUM).count(),
             "hard_questions": active_tests.filter(level=Test.Level.HARD).count(),
             "quiz_answers_today": UserAnsweredTest.objects.filter(
-                created_at__gte=today_start
+                created_at__date=today
             ).count(),
             "quiz_answers_total": UserAnsweredTest.objects.count(),
             "charts": get_chart_data(),

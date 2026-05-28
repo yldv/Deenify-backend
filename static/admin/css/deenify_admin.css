@@ -134,6 +134,49 @@
   padding-top: 0.5rem;
 }
 
+/* Savol formasi — aniq til bo'limlari */
+.deenify-fs-uz h2,
+.deenify-fs-uz .card-header {
+  border-left: 4px solid #3182ce !important;
+  padding-left: 0.75rem;
+}
+
+.deenify-fs-uz-cy h2,
+.deenify-fs-uz-cy .card-header {
+  border-left: 4px solid #38a169 !important;
+  padding-left: 0.75rem;
+}
+
+.deenify-fs-ru h2,
+.deenify-fs-ru .card-header {
+  border-left: 4px solid #d69e2e !important;
+  padding-left: 0.75rem;
+}
+
+.deenify-fs-uz h2::before {
+  content: "🇺🇿 ";
+}
+
+.deenify-fs-uz-cy h2::before {
+  content: "🇺🇿 ";
+}
+
+.deenify-fs-ru h2::before {
+  content: "🇷🇺 ";
+}
+
+/* Javoblar inline — kengroq */
+.inline-group .tabular td input[type="text"],
+.inline-group .tabular td textarea {
+  min-width: 12rem;
+}
+
+.inline-group .tabular th.field-text_uz,
+.inline-group .tabular th.field-text_uz_cy,
+.inline-group .tabular th.field-text_ru {
+  min-width: 10rem;
+}
+
 /* JSON import sahifasi */
 .deenify-import-page .card-primary.card-outline {
   border-radius: 14px;

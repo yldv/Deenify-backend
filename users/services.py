@@ -9,7 +9,7 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 
 from core.constants import SUPPORTED_LANGUAGES
-from tests.models import UserAnsweredTest, UserTestAnswer, UserTestSession
+from tests.models import UserAnsweredTest
 from tests.quiz_services import get_quiz_progress
 
 from .models import AtmosOrder, AtmosTransaction, SubscriptionPlan, TelegramUser
@@ -289,8 +289,6 @@ def get_admin_statistics():
         "failed_orders": AtmosOrder.objects.filter(status=AtmosOrder.Status.FAILED).count(),
         "total_revenue": total_revenue,
         "today_revenue": today_revenue,
-        "total_sessions": UserTestSession.objects.count(),
-        "total_answers": UserTestAnswer.objects.count(),
     }
 
 

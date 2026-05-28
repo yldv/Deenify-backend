@@ -33,8 +33,6 @@ JAZZMIN_SETTINGS = {
         "tests.Test": "fas fa-book-quran",
         "tests.Answer": "fas fa-list-ul",
         "tests.UserAnsweredTest": "fas fa-check-double",
-        "tests.UserTestSession": "fas fa-clipboard-list",
-        "tests.UserTestAnswer": "fas fa-pen",
     },
     "default_icon_parents": "fas fa-chevron-circle-right",
     "default_icon_children": "fas fa-circle",
@@ -46,7 +44,9 @@ JAZZMIN_SETTINGS = {
     "changeform_format": "horizontal_tabs",
     "changeform_format_overrides": {
         "users.telegramuser": "collapsible",
-        "tests.test": "horizontal_tabs",
+        "tests.test": "collapsible",
+        "tests.answer": "collapsible",
+        "users.subscriptionplan": "collapsible",
     },
     "language_chooser": False,
 }
