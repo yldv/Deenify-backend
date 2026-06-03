@@ -10,10 +10,10 @@ from .tests import router as tests_router
 
 def setup_routers() -> Router:
     router = Router()
+    router.include_router(tests_router)
     router.include_router(menu_router)
     router.include_router(start_router)
     router.include_router(registration_router)
     router.include_router(settings_router)
     router.include_router(help_router)
-    router.include_router(tests_router)
     return router

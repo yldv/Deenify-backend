@@ -73,6 +73,10 @@ TEXTS = {
             "To'lov tez orada qo'shiladi."
         ),
         "quiz_restart_hint": "✨ Test qayta boshlandi. Barcha savollar boshidan, tasodifiy tartibda.",
+        "quiz_session_expired": (
+            "⏳ Bu savol muddati tugadi (bot qayta ishga tushgan bo'lishi mumkin).\n"
+            "«Test yechish» tugmasini bosing."
+        ),
         "blocked": "Akkount bloklangan.",
         "not_found": "Ma'lumot topilmadi. /start ni bosing.",
         "error": "Xatolik yuz berdi. Keyinroq urinib ko'ring.",
@@ -125,6 +129,10 @@ TEXTS = {
             "Тўлов тез орада қўшилади."
         ),
         "quiz_restart_hint": "✨ Тест қайта бошланди. Барча саволлар бошидан, тасодифий тартибда.",
+        "quiz_session_expired": (
+            "⏳ Бу savol muddati tugadi (bot qayta ishga tushgan bo'lishi mumkin).\n"
+            "«Тест ечиш» tugmasini bosing."
+        ),
         "blocked": "Аккаунт блокланган.",
         "not_found": "Маълумот топилмади. /start ни босинг.",
         "error": "Хатолик юз берди. Кейинроқ уриниб кўринг.",

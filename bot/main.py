@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher
+from aiogram.enums import UpdateType
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from .api_client import BackendApiClient
@@ -22,7 +23,11 @@ async def main():
         bot,
         api_client=api_client,
         bot_config=config,
-        allowed_updates=dispatcher.resolve_used_update_types(),
+        allowed_updates=[
+            UpdateType.MESSAGE,
+            UpdateType.CALLBACK_QUERY,
+            UpdateType.POLL_ANSWER,
+        ],
     )
 
 

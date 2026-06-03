@@ -119,11 +119,19 @@ class QuizMessenger:
             explanation=build_poll_explanation(question.get("description", "")),
         )
 
+        remember_poll(
+            poll_id=poll_message.poll.id,
+            question=question,
+            language=language,
+            telegram_id=chat_id,
+        )
+
         await state.set_state(TakingTest.answering)
         await state.update_data(
             current_question=question,
-            active_poll_id=poll_message.poll.id,
+            active_poll_id=str(poll_message.poll.id),
             language=language,
+            telegram_id=chat_id,
         )
         return True
 
