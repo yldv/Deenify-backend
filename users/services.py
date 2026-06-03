@@ -1,5 +1,10 @@
+import base64
+import hashlib
+import hmac
 import json
 from decimal import Decimal
+from secrets import randbelow
+from urllib.parse import urlencode
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -87,46 +92,110 @@ class AtmosPaymentService:
     def __init__(self):
         self.base_url = settings.ATMOS_BASE_URL.rstrip("/")
         self.store_id = settings.ATMOS_STORE_ID
+        self.terminal_id = settings.ATMOS_TERMINAL_ID
         self.consumer_key = settings.ATMOS_CONSUMER_KEY
         self.consumer_secret = settings.ATMOS_CONSUMER_SECRET
         self.callback_url = settings.ATMOS_CALLBACK_URL
         self.return_url = settings.ATMOS_RETURN_URL
+        self.checkout_url = settings.ATMOS_CHECKOUT_URL
 
-    def create_payment(self, order):
-        payload = {
-            "store_id": self.store_id,
-            "amount": str(order.amount),
-            "account": order.merchant_order_id,
-            "callback_url": self.callback_url,
-            "return_url": self.return_url,
-        }
-        if not self.base_url or not self.consumer_key or not self.consumer_secret:
-            return {"payment_url": "", "raw": {"detail": "Atmos credentials are not configured."}}
+    def is_configured(self):
+        return bool(self.base_url and self.store_id and self.consumer_key and self.consumer_secret)
+
+    def _request_json(self, path, *, payload=None, headers=None, method="POST"):
+        data = None
+        request_headers = headers or {}
+        if payload is not None:
+            data = json.dumps(payload).encode("utf-8")
+            request_headers = {"Content-Type": "application/json", **request_headers}
 
         request = Request(
-            f"{self.base_url}/merchant/pay/create",
-            data=json.dumps(payload).encode("utf-8"),
+            f"{self.base_url}{path}",
+            data=data,
+            headers=request_headers,
+            method=method,
+        )
+        with urlopen(request, timeout=15) as response:
+            body = response.read().decode("utf-8")
+            return json.loads(body) if body else {}
+
+    def get_access_token(self):
+        credentials = f"{self.consumer_key}:{self.consumer_secret}".encode("utf-8")
+        encoded_credentials = base64.b64encode(credentials).decode("ascii")
+        request = Request(
+            f"{self.base_url}/token?grant_type=client_credentials",
+            data=b"grant_type=client_credentials",
             headers={
-                "Content-Type": "application/json",
-                "X-Consumer-Key": self.consumer_key,
-                "X-Consumer-Secret": self.consumer_secret,
+                "Authorization": f"Basic {encoded_credentials}",
+                "Content-Type": "application/x-www-form-urlencoded",
             },
             method="POST",
         )
-        try:
-            with urlopen(request, timeout=15) as response:
-                raw = json.loads(response.read().decode("utf-8"))
-        except (OSError, URLError, ValueError) as exc:
-            raw = {"error": str(exc)}
+        with urlopen(request, timeout=15) as response:
+            raw = json.loads(response.read().decode("utf-8"))
+        return raw["access_token"], raw
 
-        payment_url = (
-            raw.get("payment_url")
-            or raw.get("pay_url")
-            or raw.get("redirect_url")
-            or raw.get("url")
-            or ""
-        )
-        return {"payment_url": payment_url, "raw": raw, "request": payload}
+    def build_payment_url(self, transaction_id):
+        query = {
+            "storeId": self.store_id,
+            "transactionId": transaction_id,
+        }
+        if self.return_url:
+            query["redirectLink"] = self.return_url
+        return f"{self.checkout_url}?{urlencode(query)}"
+
+    def create_payment(self, order):
+        amount_tiyin = amount_to_tiyin(order.amount)
+        payload = {
+            "store_id": self.store_id,
+            "amount": amount_tiyin,
+            "account": order.merchant_order_id,
+            "lang": "uz",
+        }
+        if self.terminal_id:
+            payload["terminal_id"] = self.terminal_id
+
+        if not self.is_configured():
+            return {
+                "payment_url": "",
+                "transaction_id": "",
+                "raw": {"detail": "Atmos credentials are not configured."},
+                "request": payload,
+            }
+
+        try:
+            access_token, token_response = self.get_access_token()
+            raw = self._request_json(
+                "/merchant/pay/create",
+                payload=payload,
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        except (OSError, URLError, KeyError, ValueError) as exc:
+            return {
+                "payment_url": "",
+                "transaction_id": "",
+                "raw": {"error": str(exc)},
+                "request": payload,
+            }
+
+        transaction_id = str(raw.get("transaction_id") or "")
+        payment_url = self.build_payment_url(transaction_id) if transaction_id else ""
+        return {
+            "payment_url": payment_url,
+            "transaction_id": transaction_id,
+            "raw": {**raw, "token_response": token_response},
+            "request": payload,
+        }
+
+
+def amount_to_tiyin(amount):
+    return int((Decimal(str(amount)) * Decimal("100")).quantize(Decimal("1")))
+
+
+def generate_merchant_order_id(user):
+    timestamp = timezone.now().strftime("%Y%m%d%H%M%S%f")
+    suffix = f"{randbelow(1_000_000):06d}"
+    return f"{timestamp}{user.telegram_id}{suffix}"[:64]
 
 
 @transaction.atomic
@@ -134,12 +203,14 @@ def create_atmos_order(*, user, plan):
     order = AtmosOrder.objects.create(
         user=user,
         plan=plan,
+        merchant_order_id=generate_merchant_order_id(user),
         amount=plan.price,
         currency=plan.currency,
         status=AtmosOrder.Status.CREATED,
     )
     payment = AtmosPaymentService().create_payment(order)
     order.payment_url = payment["payment_url"]
+    order.atmos_transaction_id = payment["transaction_id"]
     order.request_payload = payment.get("request", {})
     order.response_payload = payment["raw"]
     if order.payment_url:
@@ -147,6 +218,7 @@ def create_atmos_order(*, user, plan):
     order.save(
         update_fields=(
             "payment_url",
+            "atmos_transaction_id",
             "request_payload",
             "response_payload",
             "status",
@@ -164,10 +236,36 @@ def extract_callback_value(payload, *keys):
     return ""
 
 
+def calculate_atmos_sign(payload):
+    api_key = settings.ATMOS_API_KEY
+    algorithm = settings.ATMOS_SIGN_ALGORITHM.lower()
+    source = "".join(
+        str(extract_callback_value(payload, key))
+        for key in ("store_id", "transaction_id", "invoice", "amount")
+    )
+    source = f"{source}{api_key}"
+    try:
+        digest = hashlib.new(algorithm)
+    except ValueError:
+        digest = hashlib.sha256()
+    digest.update(source.encode("utf-8"))
+    return digest.hexdigest()
+
+
+def validate_atmos_callback_sign(payload):
+    expected_sign = extract_callback_value(payload, "sign")
+    if not settings.ATMOS_API_KEY:
+        return True
+    if not expected_sign:
+        return False
+    return hmac.compare_digest(str(expected_sign).lower(), calculate_atmos_sign(payload).lower())
+
+
 @transaction.atomic
 def process_atmos_callback(payload):
     merchant_order_id = extract_callback_value(
         payload,
+        "invoice",
         "merchant_order_id",
         "account",
         "order_id",
@@ -184,6 +282,9 @@ def process_atmos_callback(payload):
         extract_callback_value(payload, "status", "state", "payment_status")
     ).lower()
     raw_amount = extract_callback_value(payload, "amount", "total", "sum")
+
+    if not validate_atmos_callback_sign(payload):
+        return {"ok": False, "error": "invalid_signature", "status": 400}
 
     order_query = None
     if merchant_order_id:
@@ -204,10 +305,10 @@ def process_atmos_callback(payload):
         return {"ok": False, "error": "order_not_found", "status": 404}
 
     try:
-        callback_amount = Decimal(str(raw_amount)) if raw_amount != "" else order.amount
+        callback_amount_tiyin = int(Decimal(str(raw_amount))) if raw_amount != "" else amount_to_tiyin(order.amount)
     except Exception:
-        callback_amount = Decimal("-1")
-    if callback_amount != order.amount:
+        callback_amount_tiyin = -1
+    if callback_amount_tiyin != amount_to_tiyin(order.amount):
         transaction_status = AtmosTransaction.Status.FAILED
         order.status = AtmosOrder.Status.FAILED
         order.response_payload = payload
@@ -217,7 +318,7 @@ def process_atmos_callback(payload):
             transaction_id=transaction_id or f"invalid-amount-{timezone.now().timestamp()}",
             defaults={
                 "status": transaction_status,
-                "amount": callback_amount,
+                "amount": Decimal(callback_amount_tiyin) / Decimal("100"),
                 "currency": order.currency,
                 "provider_payload": payload,
                 "performed_at": timezone.now(),
@@ -229,7 +330,7 @@ def process_atmos_callback(payload):
     failed_statuses = {"failed", "error", "declined", "rejected", "-1"}
     canceled_statuses = {"cancelled", "canceled", "cancel", "0"}
 
-    if raw_status in success_statuses:
+    if not raw_status or raw_status in success_statuses:
         transaction_status = AtmosTransaction.Status.SUCCESS
     elif raw_status in canceled_statuses:
         transaction_status = AtmosTransaction.Status.CANCELED

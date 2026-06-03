@@ -30,4 +30,4 @@ staticfiles/
 .vscode/
 
 # Migrations cache
-**/__pycache__/
+**/__pycache__/db.sqlite3

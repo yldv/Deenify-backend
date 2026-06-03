@@ -204,11 +204,15 @@ SPECTACULAR_SETTINGS = {
 from config.jazzmin_settings import JAZZMIN_SETTINGS, JAZZMIN_UI_TWEAKS  # noqa: E402
 
 ATMOS_STORE_ID = os.environ.get('ATMOS_STORE_ID', '')
+ATMOS_TERMINAL_ID = os.environ.get('ATMOS_TERMINAL_ID', '')
 ATMOS_CONSUMER_KEY = os.environ.get('ATMOS_CONSUMER_KEY', '')
 ATMOS_CONSUMER_SECRET = os.environ.get('ATMOS_CONSUMER_SECRET', '')
+ATMOS_API_KEY = os.environ.get('ATMOS_API_KEY', '')
 ATMOS_CALLBACK_URL = os.environ.get('ATMOS_CALLBACK_URL', '')
 ATMOS_RETURN_URL = os.environ.get('ATMOS_RETURN_URL', '')
-ATMOS_BASE_URL = os.environ.get('ATMOS_BASE_URL', 'https://partner.atmos.uz')
+ATMOS_BASE_URL = os.environ.get('ATMOS_BASE_URL', 'https://apigw.atmos.uz')
+ATMOS_CHECKOUT_URL = os.environ.get('ATMOS_CHECKOUT_URL', 'https://checkout.pays.uz/invoice/get')
+ATMOS_SIGN_ALGORITHM = os.environ.get('ATMOS_SIGN_ALGORITHM', 'sha256')
 
 # Quiz (Telegram bot round-based flow)
 DEENIFY_QUIZ_DEFAULT_CATEGORY_SLUG = os.environ.get('DEENIFY_QUIZ_DEFAULT_CATEGORY_SLUG', 'islam')
