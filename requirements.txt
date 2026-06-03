@@ -6,3 +6,6 @@ django-modeltranslation>=0.19,<0.20
 python-dotenv>=1.0,<2
 aiogram>=3.13,<4
 aiohttp>=3.10,<4
+gunicorn>=23.0,<24
+psycopg2-binary>=2.9,<3
+dj-database-url>=2.1,<3

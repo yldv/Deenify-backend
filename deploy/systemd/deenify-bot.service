@@ -1,0 +1,15 @@
+[Unit]
+Description=Deenify Telegram Bot
+After=network.target deenify-web.service
+
+[Service]
+User=deenify
+Group=deenify
+WorkingDirectory=/var/www/deenify
+EnvironmentFile=/var/www/deenify/.env
+ExecStart=/var/www/deenify/.venv/bin/python bot.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
