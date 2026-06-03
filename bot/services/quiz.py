@@ -4,6 +4,7 @@ from aiogram.fsm.context import FSMContext
 
 from bot.api_client import ApiClientError, BlockedUserError, NotFoundError, PaymentRequiredError
 from bot.keyboards import home_keyboard
+from bot.poll_sessions import remember_poll
 from bot.states import TakingTest
 from bot.texts import get_text
 from bot.uz_cyrillic import localize_quiz_content
