@@ -16,6 +16,8 @@ async def main():
     config = load_config()
 
     bot = Bot(token=config.bot_token)
+    await bot.delete_webhook(drop_pending_updates=False)
+
     dispatcher = Dispatcher(storage=MemoryStorage())
     dispatcher.include_router(setup_routers())
 
