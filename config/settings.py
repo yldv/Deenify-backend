@@ -176,7 +176,10 @@ CSRF_TRUSTED_ORIGINS = [
     if origin.strip()
 ]
 
-if not DEBUG:
+# True only after HTTPS (certbot). Over plain http://IP secure cookies break admin login.
+USE_HTTPS = os.getenv('DJANGO_USE_HTTPS', 'False') == 'True'
+
+if not DEBUG and USE_HTTPS:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
