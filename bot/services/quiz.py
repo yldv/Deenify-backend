@@ -96,6 +96,7 @@ class QuizMessenger:
         question: dict,
         progress: dict,
         language: str,
+        telegram_id: int,
     ) -> bool:
         question = localize_quiz_content(question, language)
         answers = question.get("answers", [])
@@ -124,7 +125,7 @@ class QuizMessenger:
             poll_id=poll_message.poll.id,
             question=question,
             language=language,
-            telegram_id=chat_id,
+            telegram_id=telegram_id,
         )
 
         await state.set_state(TakingTest.answering)
@@ -132,7 +133,7 @@ class QuizMessenger:
             current_question=question,
             active_poll_id=str(poll_message.poll.id),
             language=language,
-            telegram_id=chat_id,
+            telegram_id=telegram_id,
         )
         return True
 
@@ -193,6 +194,7 @@ class QuizMessenger:
             question=question,
             progress=data.get("progress", {}),
             language=language,
+            telegram_id=telegram_id,
         )
 
     async def restart_from_start(
@@ -252,7 +254,7 @@ class QuizMessenger:
                 answer_id=answer_id,
                 language=language,
             )
-        except (PaymentRequiredError, ApiClientError) as exc:
+        except (PaymentRequiredError, BlockedUserError, NotFoundError, ApiClientError) as exc:
             return await self._send_api_error(
                 bot=bot,
                 chat_id=chat_id,
