@@ -1,5 +1,6 @@
 from django.core.exceptions import PermissionDenied, ValidationError
-
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -21,6 +22,18 @@ from tests.serializers import (
 from .base import QuizAPIView
 
 
+@extend_schema(
+    tags=["quiz"],
+    parameters=[
+        OpenApiParameter(
+            "telegram_id",
+            OpenApiTypes.INT,
+            OpenApiParameter.QUERY,
+            required=True,
+        ),
+    ],
+    responses={200: OpenApiTypes.OBJECT},
+)
 class QuizProgressView(QuizAPIView):
     def get(self, request):
         serializer = QuizTelegramIdSerializer(data=request.query_params)
@@ -31,6 +44,18 @@ class QuizProgressView(QuizAPIView):
         return Response(get_quiz_progress(user), status=status.HTTP_200_OK)
 
 
+@extend_schema(
+    tags=["quiz"],
+    parameters=[
+        OpenApiParameter(
+            "telegram_id",
+            OpenApiTypes.INT,
+            OpenApiParameter.QUERY,
+            required=True,
+        ),
+    ],
+    responses={200: OpenApiTypes.OBJECT},
+)
 class QuizNextQuestionView(QuizAPIView):
     def get(self, request):
         serializer = QuizTelegramIdSerializer(data=request.query_params)
@@ -60,6 +85,11 @@ class QuizNextQuestionView(QuizAPIView):
         )
 
 
+@extend_schema(
+    tags=["quiz"],
+    request=QuizAnswerSerializer,
+    responses={200: OpenApiTypes.OBJECT},
+)
 class QuizAnswerView(QuizAPIView):
     def post(self, request):
         serializer = QuizAnswerSerializer(data=request.data)
@@ -90,6 +120,11 @@ class QuizAnswerView(QuizAPIView):
         )
 
 
+@extend_schema(
+    tags=["quiz"],
+    request=QuizRestartSerializer,
+    responses={200: OpenApiTypes.OBJECT},
+)
 class QuizRestartView(QuizAPIView):
     def post(self, request):
         serializer = QuizRestartSerializer(data=request.data)
@@ -106,6 +141,11 @@ class QuizRestartView(QuizAPIView):
         return Response(progress, status=status.HTTP_200_OK)
 
 
+@extend_schema(
+    tags=["quiz"],
+    request=QuizRestartSerializer,
+    responses={200: OpenApiTypes.OBJECT},
+)
 class QuizResetView(QuizAPIView):
     def post(self, request):
         serializer = QuizRestartSerializer(data=request.data)

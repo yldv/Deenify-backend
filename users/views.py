@@ -1,4 +1,6 @@
 from django.utils import translation
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
@@ -26,6 +28,11 @@ from .services import (
 )
 
 
+@extend_schema(
+    tags=["bot-users"],
+    request=TelegramUserUpsertSerializer,
+    responses={200: TelegramUserSerializer},
+)
 class BotUserView(APIView):
     def post(self, request):
         serializer = TelegramUserUpsertSerializer(data=request.data)
@@ -36,6 +43,7 @@ class BotUserView(APIView):
         return Response(data, status=status.HTTP_200_OK)
 
 
+@extend_schema(tags=["bot-users"], responses={200: TelegramUserSerializer})
 class BotUserDetailView(APIView):
     def get(self, request, telegram_id):
         user = get_telegram_user(telegram_id)
@@ -46,6 +54,11 @@ class BotUserDetailView(APIView):
         return Response(data, status=status.HTTP_200_OK)
 
 
+@extend_schema(
+    tags=["bot-users"],
+    request=TelegramUserLanguageSerializer,
+    responses={200: TelegramUserSerializer},
+)
 class BotUserLanguageView(APIView):
     def patch(self, request, telegram_id):
         user = get_telegram_user(telegram_id)
@@ -61,6 +74,7 @@ class BotUserLanguageView(APIView):
         return Response(data, status=status.HTTP_200_OK)
 
 
+@extend_schema(tags=["bot-users"], responses={200: OpenApiTypes.OBJECT})
 class BotUserStatisticsView(APIView):
     def get(self, request, telegram_id):
         user = get_telegram_user(telegram_id)
@@ -69,6 +83,18 @@ class BotUserStatisticsView(APIView):
         return Response(get_user_statistics(user), status=status.HTTP_200_OK)
 
 
+@extend_schema(
+    tags=["subscriptions"],
+    parameters=[
+        OpenApiParameter(
+            "telegram_id",
+            OpenApiTypes.INT,
+            OpenApiParameter.QUERY,
+            required=False,
+        ),
+    ],
+    responses={200: SubscriptionPlanSerializer(many=True)},
+)
 class SubscriptionPlanListView(APIView):
     def get(self, request):
         telegram_id = request.query_params.get("telegram_id")
@@ -79,6 +105,11 @@ class SubscriptionPlanListView(APIView):
         return Response(data, status=status.HTTP_200_OK)
 
 
+@extend_schema(
+    tags=["payments"],
+    request=AtmosOrderCreateSerializer,
+    responses={201: AtmosOrderCreateResponseSerializer},
+)
 class AtmosOrderCreateView(APIView):
     def post(self, request):
         serializer = AtmosOrderCreateSerializer(data=request.data)
@@ -101,6 +132,11 @@ class AtmosOrderCreateView(APIView):
         )
 
 
+@extend_schema(
+    tags=["payments"],
+    request=OpenApiTypes.OBJECT,
+    responses={200: OpenApiTypes.OBJECT},
+)
 class AtmosCallbackView(APIView):
     authentication_classes = ()
     permission_classes = ()
@@ -116,6 +152,7 @@ class AtmosCallbackView(APIView):
         return Response({"success": True}, status=status.HTTP_200_OK)
 
 
+@extend_schema(tags=["bot-users"], responses={200: AtmosOrderSerializer(many=True)})
 class BotUserOrdersView(APIView):
     def get(self, request, telegram_id):
         user = get_telegram_user(telegram_id)
@@ -131,6 +168,7 @@ class BotUserOrdersView(APIView):
         return Response(data, status=status.HTTP_200_OK)
 
 
+@extend_schema(tags=["admin"], responses={200: OpenApiTypes.OBJECT})
 class AdminStatisticsView(APIView):
     permission_classes = (IsAdminUser,)
 

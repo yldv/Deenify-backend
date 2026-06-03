@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'jazzmin',
     'modeltranslation',
     'rest_framework',
+    'drf_spectacular',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -159,6 +160,24 @@ STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Deenify API',
+    'DESCRIPTION': 'Telegram bot, quiz va to\'lov API',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'TAGS': [
+        {'name': 'bot-users', 'description': 'Telegram foydalanuvchilar'},
+        {'name': 'quiz', 'description': 'Test savollari'},
+        {'name': 'subscriptions', 'description': 'Obuna rejalari'},
+        {'name': 'payments', 'description': 'Atmos to\'lovlar'},
+        {'name': 'admin', 'description': 'Admin statistika'},
+    ],
+}
 
 from config.jazzmin_settings import JAZZMIN_SETTINGS, JAZZMIN_UI_TWEAKS  # noqa: E402
 
