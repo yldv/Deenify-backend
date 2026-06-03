@@ -54,8 +54,13 @@ async def restart_from_start_button(message: Message, state: FSMContext, api_cli
     await _run_restart_from_start(message, state, api_client)
 
 
-@router.poll_answer()
 async def poll_answer_handler(poll_answer: PollAnswer, state: FSMContext, api_client, bot: Bot):
+    logger.info(
+        "poll_answer received poll_id=%s user=%s option_ids=%s",
+        poll_answer.poll_id,
+        poll_answer.user.id if poll_answer.user else None,
+        poll_answer.option_ids,
+    )
     if not poll_answer.option_ids:
         return
 
@@ -111,6 +116,12 @@ async def poll_answer_handler(poll_answer: PollAnswer, state: FSMContext, api_cl
 
     forget_poll(poll_id)
     quiz = QuizMessenger(api_client)
+    logger.info(
+        "submitting answer test_id=%s answer_id=%s telegram_id=%s",
+        question.get("id"),
+        answers[option_index]["id"],
+        telegram_id,
+    )
     await quiz.process_answer(
         bot=bot,
         chat_id=telegram_id,

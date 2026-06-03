@@ -89,6 +89,14 @@ class BackendApiClient:
             return {"detail": response_text}
 
     def _log_failure(self, method, url, status, response_text):
+        if method == "GET" and status == 404 and "/bot/users/" in url:
+            logger.info(
+                "Backend user lookup: method=%s url=%s status=%s",
+                method,
+                url,
+                status,
+            )
+            return
         logger.error(
             "Backend request failed: method=%s url=%s status=%s response=%s",
             method,
