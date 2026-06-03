@@ -116,7 +116,7 @@ nano .env
 - `BOT_TOKEN` — от @BotFather
 - `ALLOWED_HOSTS` — `api.frienfinity.uz,frienfinity.uz,IP`
 - `CSRF_TRUSTED_ORIGINS` — `https://api.frienfinity.uz`
-- `BACKEND_BASE_URL` — `https://api.frienfinity.uz` (после SSL; до SSL можно временно `http://IP`)
+- `BACKEND_BASE_URL` — `https://api.frienfinity.uz/api/v1` (после SSL; до SSL `http://IP/api/v1`)
 
 ---
 
@@ -175,7 +175,7 @@ sudo certbot --nginx -d api.frienfinity.uz
 В `.env` обновите:
 
 ```env
-BACKEND_BASE_URL=https://api.frienfinity.uz
+BACKEND_BASE_URL=https://api.frienfinity.uz/api/v1
 ATMOS_CALLBACK_URL=https://api.frienfinity.uz/api/v1/payments/atmos/callback/
 ```
 

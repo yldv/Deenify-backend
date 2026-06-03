@@ -115,7 +115,7 @@ class QuizMessenger:
             options=[clip_text(answer["text"], POLL_OPTION_LIMIT) for answer in answers],
             type=PollType.QUIZ,
             correct_option_id=int(question.get("correct_option_index", 0)),
-            is_anonymous=False,
+            is_anonymous=True,
             explanation=build_poll_explanation(question.get("description", "")),
         )
 
