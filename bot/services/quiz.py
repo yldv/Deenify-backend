@@ -1,8 +1,9 @@
 from aiogram import Bot
+from aiogram.enums import PollType
 from aiogram.fsm.context import FSMContext
 
 from bot.api_client import ApiClientError, BlockedUserError, NotFoundError, PaymentRequiredError
-from bot.keyboards import home_keyboard, quiz_answers_keyboard
+from bot.keyboards import home_keyboard
 from bot.poll_sessions import remember_poll
 from bot.states import TakingTest
 from bot.texts import get_text
@@ -10,6 +11,7 @@ from bot.uz_cyrillic import localize_quiz_content
 from core.constants import API_ROUND_COMPLETE
 
 POLL_QUESTION_LIMIT = 300
+POLL_OPTION_LIMIT = 100
 POLL_EXPLANATION_LIMIT = 200
 
 
@@ -33,14 +35,6 @@ def build_poll_explanation(description: str) -> str | None:
     """Poll explanation (lamp / after answer): Manba only — uz/uz_cy/ru from API."""
     source = (description or "").strip()
     return clip_text(source, POLL_EXPLANATION_LIMIT) if source else None
-
-
-def build_question_text(question: dict) -> str:
-    text = clip_text(question["question"], POLL_QUESTION_LIMIT)
-    source = build_poll_explanation(question.get("description", ""))
-    if source:
-        text = f"{text}\n\n📚 {source}"
-    return text
 
 
 class QuizMessenger:
@@ -117,14 +111,20 @@ class QuizMessenger:
 
         await bot.send_message(chat_id, format_progress_header(language, progress))
 
-        question_message = await bot.send_message(
+        # is_anonymous=False is required: Telegram does not send poll_answer for anonymous polls.
+        poll_message = await bot.send_poll(
             chat_id,
-            build_question_text(question),
-            reply_markup=quiz_answers_keyboard(question["id"], answers),
+            question=clip_text(question["question"], POLL_QUESTION_LIMIT),
+            options=[clip_text(answer["text"], POLL_OPTION_LIMIT) for answer in answers],
+            type=PollType.QUIZ,
+            correct_option_id=int(question.get("correct_option_index", 0)),
+            is_anonymous=False,
+            explanation=build_poll_explanation(question.get("description", "")),
         )
 
+        poll_id = str(poll_message.poll.id)
         remember_poll(
-            poll_id=question_message.message_id,
+            poll_id=poll_id,
             question=question,
             language=language,
             telegram_id=telegram_id,
@@ -133,7 +133,7 @@ class QuizMessenger:
         await state.set_state(TakingTest.answering)
         await state.update_data(
             current_question=question,
-            active_quiz_message_id=str(question_message.message_id),
+            active_poll_id=poll_id,
             language=language,
             telegram_id=telegram_id,
         )
