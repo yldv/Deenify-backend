@@ -126,10 +126,13 @@ class AtmosOrderCreateView(APIView):
             return Response({"detail": "Subscription plan not found."}, status=status.HTTP_404_NOT_FOUND)
 
         order = create_atmos_order(user=user, plan=plan)
-        return Response(
-            AtmosOrderCreateResponseSerializer(order).data,
-            status=status.HTTP_201_CREATED,
-        )
+        data = AtmosOrderCreateResponseSerializer(order).data
+        if not order.payment_url:
+            return Response(
+                data,
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response(data, status=status.HTTP_201_CREATED)
 
 
 @extend_schema(

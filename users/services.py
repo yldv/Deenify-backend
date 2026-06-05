@@ -2,11 +2,14 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 from decimal import Decimal
 from secrets import randbelow
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.error import URLError
 from urllib.request import Request, urlopen
+
+logger = logging.getLogger(__name__)
 
 from django.conf import settings
 from django.db import transaction
@@ -97,10 +100,33 @@ class AtmosPaymentService:
         self.consumer_secret = settings.ATMOS_CONSUMER_SECRET
         self.callback_url = settings.ATMOS_CALLBACK_URL
         self.return_url = settings.ATMOS_RETURN_URL
-        self.checkout_url = settings.ATMOS_CHECKOUT_URL
+        self.checkout_url = settings.ATMOS_CHECKOUT_URL.rstrip("/")
 
     def is_configured(self):
-        return bool(self.base_url and self.store_id and self.consumer_key and self.consumer_secret)
+        return bool(
+            self.base_url
+            and self.store_id
+            and self.consumer_key
+            and self.consumer_secret
+        )
+
+    def missing_config_fields(self):
+        missing = []
+        if not self.store_id:
+            missing.append("ATMOS_STORE_ID")
+        if not self.consumer_key:
+            missing.append("ATMOS_CONSUMER_KEY")
+        if not self.consumer_secret:
+            missing.append("ATMOS_CONSUMER_SECRET")
+        return missing
+
+    @staticmethod
+    def _read_http_body(exc: HTTPError) -> dict:
+        try:
+            body = exc.read().decode("utf-8")
+            return json.loads(body) if body else {"error": str(exc)}
+        except Exception:
+            return {"error": str(exc), "status": exc.code}
 
     def _request_json(self, path, *, payload=None, headers=None, method="POST"):
         data = None
@@ -115,9 +141,14 @@ class AtmosPaymentService:
             headers=request_headers,
             method=method,
         )
-        with urlopen(request, timeout=15) as response:
-            body = response.read().decode("utf-8")
-            return json.loads(body) if body else {}
+        try:
+            with urlopen(request, timeout=20) as response:
+                body = response.read().decode("utf-8")
+                return json.loads(body) if body else {}
+        except HTTPError as exc:
+            error_payload = self._read_http_body(exc)
+            error_payload["http_status"] = exc.code
+            raise ValueError(error_payload) from exc
 
     def get_access_token(self):
         credentials = f"{self.consumer_key}:{self.consumer_secret}".encode("utf-8")
@@ -131,9 +162,16 @@ class AtmosPaymentService:
             },
             method="POST",
         )
-        with urlopen(request, timeout=15) as response:
-            raw = json.loads(response.read().decode("utf-8"))
-        return raw["access_token"], raw
+        try:
+            with urlopen(request, timeout=20) as response:
+                raw = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            error_payload = self._read_http_body(exc)
+            raise ValueError(error_payload) from exc
+        access_token = raw.get("access_token")
+        if not access_token:
+            raise ValueError(raw)
+        return access_token, raw
 
     def build_payment_url(self, transaction_id):
         query = {
@@ -144,10 +182,64 @@ class AtmosPaymentService:
             query["redirectLink"] = self.return_url
         return f"{self.checkout_url}?{urlencode(query)}"
 
+    @staticmethod
+    def _extract_transaction_id(raw: dict) -> str:
+        for key in ("transaction_id", "trans_id", "transactionId"):
+            value = raw.get(key)
+            if value not in (None, ""):
+                return str(value)
+        store_transaction = raw.get("store_transaction") or {}
+        for key in ("trans_id", "success_trans_id"):
+            value = store_transaction.get(key)
+            if value not in (None, ""):
+                return str(value)
+        return ""
+
+    @staticmethod
+    def _extract_payment_url(raw: dict) -> str:
+        for key in ("paymentUrl", "payment_url", "pay_url"):
+            value = raw.get(key)
+            if value:
+                return str(value)
+        return ""
+
+    @staticmethod
+    def _extract_api_error(raw: dict) -> str:
+        result = raw.get("result") or {}
+        code = result.get("code")
+        if code and str(code).upper() != "OK":
+            return str(result.get("description") or result.get("message") or code)
+        if raw.get("error"):
+            return str(raw["error"])
+        if raw.get("detail"):
+            return str(raw["detail"])
+        if raw.get("http_status"):
+            return f"Atmos HTTP {raw['http_status']}"
+        return ""
+
+    @staticmethod
+    def _normalize_store_id(store_id):
+        value = str(store_id).strip()
+        return int(value) if value.isdigit() else value
+
+    @staticmethod
+    def _format_request_error(exc: Exception) -> str:
+        if isinstance(exc, ValueError) and exc.args and isinstance(exc.args[0], dict):
+            return AtmosPaymentService._extract_api_error(exc.args[0]) or str(exc)
+        message = str(exc).lower()
+        if "timed out" in message or "timeout" in message:
+            return (
+                "Cannot reach Atmos API (apigw.atmos.uz timeout). "
+                "The server may need Uzbekistan network access or Atmos IP whitelist."
+            )
+        if "nodename nor servname" in message or "name or service not known" in message:
+            return "Cannot resolve Atmos API host. Check ATMOS_BASE_URL."
+        return str(exc)
+
     def create_payment(self, order):
         amount_tiyin = amount_to_tiyin(order.amount)
         payload = {
-            "store_id": self.store_id,
+            "store_id": self._normalize_store_id(self.store_id),
             "amount": amount_tiyin,
             "account": order.merchant_order_id,
             "lang": "uz",
@@ -156,10 +248,17 @@ class AtmosPaymentService:
             payload["terminal_id"] = self.terminal_id
 
         if not self.is_configured():
+            missing = ", ".join(self.missing_config_fields())
+            detail = (
+                f"Atmos is not configured. Set in .env: {missing}. "
+                "Get test keys at https://partner-test.atmos.uz"
+            )
+            logger.warning("Atmos payment skipped: %s", detail)
             return {
                 "payment_url": "",
                 "transaction_id": "",
-                "raw": {"detail": "Atmos credentials are not configured."},
+                "error": detail,
+                "raw": {"detail": detail},
                 "request": payload,
             }
 
@@ -171,18 +270,61 @@ class AtmosPaymentService:
                 headers={"Authorization": f"Bearer {access_token}"},
             )
         except (OSError, URLError, KeyError, ValueError) as exc:
+            error_detail = self._format_request_error(exc)
+            logger.exception(
+                "Atmos create payment failed for order=%s: %s",
+                order.merchant_order_id,
+                error_detail,
+            )
             return {
                 "payment_url": "",
                 "transaction_id": "",
-                "raw": {"error": str(exc)},
+                "error": error_detail,
+                "raw": {"error": error_detail},
                 "request": payload,
             }
 
-        transaction_id = str(raw.get("transaction_id") or "")
-        payment_url = self.build_payment_url(transaction_id) if transaction_id else ""
+        api_error = self._extract_api_error(raw)
+        transaction_id = self._extract_transaction_id(raw)
+        payment_url = self._extract_payment_url(raw)
+        if not payment_url and transaction_id:
+            payment_url = self.build_payment_url(transaction_id)
+
+        if api_error and not transaction_id:
+            logger.error(
+                "Atmos create payment rejected order=%s error=%s raw=%s",
+                order.merchant_order_id,
+                api_error,
+                raw,
+            )
+            return {
+                "payment_url": "",
+                "transaction_id": "",
+                "error": api_error,
+                "raw": {**raw, "token_response": token_response},
+                "request": payload,
+            }
+
+        if not payment_url:
+            error = api_error or "Atmos did not return transaction_id."
+            logger.error(
+                "Atmos create payment without URL order=%s error=%s raw=%s",
+                order.merchant_order_id,
+                error,
+                raw,
+            )
+            return {
+                "payment_url": "",
+                "transaction_id": transaction_id,
+                "error": error,
+                "raw": {**raw, "token_response": token_response},
+                "request": payload,
+            }
+
         return {
             "payment_url": payment_url,
             "transaction_id": transaction_id,
+            "error": "",
             "raw": {**raw, "token_response": token_response},
             "request": payload,
         }
@@ -212,7 +354,10 @@ def create_atmos_order(*, user, plan):
     order.payment_url = payment["payment_url"]
     order.atmos_transaction_id = payment["transaction_id"]
     order.request_payload = payment.get("request", {})
-    order.response_payload = payment["raw"]
+    order.response_payload = {
+        **payment.get("raw", {}),
+        **({"error": payment["error"]} if payment.get("error") else {}),
+    }
     if order.payment_url:
         order.status = AtmosOrder.Status.PENDING
     order.save(

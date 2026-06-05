@@ -87,6 +87,34 @@ class AtmosOrderSerializer(serializers.ModelSerializer):
 
 
 class AtmosOrderCreateResponseSerializer(serializers.ModelSerializer):
+    payment_error = serializers.SerializerMethodField()
+
     class Meta:
         model = AtmosOrder
-        fields = ("order_id", "merchant_order_id", "amount", "status", "payment_url")
+        fields = (
+            "order_id",
+            "merchant_order_id",
+            "amount",
+            "status",
+            "payment_url",
+            "payment_error",
+        )
+
+    def get_payment_error(self, obj):
+        if obj.payment_url:
+            return ""
+        payload = obj.response_payload or {}
+        return (
+            payload.get("error")
+            or payload.get("detail")
+            or self._extract_result_error(payload)
+            or "Payment URL was not created."
+        )
+
+    @staticmethod
+    def _extract_result_error(payload):
+        result = payload.get("result") or {}
+        code = result.get("code")
+        if code and str(code).upper() != "OK":
+            return result.get("description") or result.get("message") or str(code)
+        return ""
