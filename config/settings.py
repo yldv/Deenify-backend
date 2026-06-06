@@ -221,7 +221,9 @@ _default_checkout_url = (
     if ATMOS_TEST_MODE
     else 'https://checkout.pays.uz/invoice/get'
 )
-ATMOS_CHECKOUT_URL = os.environ.get('ATMOS_CHECKOUT_URL', _default_checkout_url).rstrip('/')
+# Empty ATMOS_CHECKOUT_URL= in .env must not override the test/prod default.
+_checkout_url_override = os.environ.get('ATMOS_CHECKOUT_URL', '').strip()
+ATMOS_CHECKOUT_URL = (_checkout_url_override or _default_checkout_url).rstrip('/')
 ATMOS_SIGN_ALGORITHM = os.environ.get('ATMOS_SIGN_ALGORITHM', 'sha256')
 
 # Quiz (Telegram bot round-based flow)

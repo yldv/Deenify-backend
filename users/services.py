@@ -174,13 +174,20 @@ class AtmosPaymentService:
         return access_token, raw
 
     def build_payment_url(self, transaction_id):
+        checkout_base = self.checkout_url
+        if not checkout_base:
+            checkout_base = (
+                "http://test-checkout.pays.uz/invoice/get"
+                if settings.ATMOS_TEST_MODE
+                else "https://checkout.pays.uz/invoice/get"
+            )
         query = {
             "storeId": self.store_id,
             "transactionId": transaction_id,
         }
         if self.return_url:
             query["redirectLink"] = self.return_url
-        return f"{self.checkout_url}?{urlencode(query)}"
+        return f"{checkout_base}?{urlencode(query)}"
 
     @staticmethod
     def _extract_transaction_id(raw: dict) -> str:
@@ -208,7 +215,8 @@ class AtmosPaymentService:
         result = raw.get("result") or {}
         code = result.get("code")
         if code and str(code).upper() != "OK":
-            return str(result.get("description") or result.get("message") or code)
+            description = str(result.get("description") or result.get("message") or code)
+            return f"{description} (code: {code})"
         if raw.get("error"):
             return str(raw["error"])
         if raw.get("detail"):
@@ -219,8 +227,8 @@ class AtmosPaymentService:
 
     @staticmethod
     def _normalize_store_id(store_id):
-        value = str(store_id).strip()
-        return int(value) if value.isdigit() else value
+        # Atmos API examples use store_id as string (e.g. "10902").
+        return str(store_id).strip()
 
     @staticmethod
     def _format_request_error(exc: Exception) -> str:
