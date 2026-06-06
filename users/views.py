@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.api import get_requested_language, get_telegram_user, user_not_found_response
+from core.bot_api import BotProtectedAPIView
 
 from .models import AtmosOrder, SubscriptionPlan, TelegramUser
 from .serializers import (
@@ -33,7 +34,7 @@ from .services import (
     request=TelegramUserUpsertSerializer,
     responses={200: TelegramUserSerializer},
 )
-class BotUserView(APIView):
+class BotUserView(BotProtectedAPIView):
     def post(self, request):
         serializer = TelegramUserUpsertSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -44,7 +45,7 @@ class BotUserView(APIView):
 
 
 @extend_schema(tags=["bot-users"], responses={200: TelegramUserSerializer})
-class BotUserDetailView(APIView):
+class BotUserDetailView(BotProtectedAPIView):
     def get(self, request, telegram_id):
         user = get_telegram_user(telegram_id)
         if not user:
@@ -59,7 +60,7 @@ class BotUserDetailView(APIView):
     request=TelegramUserLanguageSerializer,
     responses={200: TelegramUserSerializer},
 )
-class BotUserLanguageView(APIView):
+class BotUserLanguageView(BotProtectedAPIView):
     def patch(self, request, telegram_id):
         user = get_telegram_user(telegram_id)
         if not user:
@@ -75,7 +76,7 @@ class BotUserLanguageView(APIView):
 
 
 @extend_schema(tags=["bot-users"], responses={200: OpenApiTypes.OBJECT})
-class BotUserStatisticsView(APIView):
+class BotUserStatisticsView(BotProtectedAPIView):
     def get(self, request, telegram_id):
         user = get_telegram_user(telegram_id)
         if not user:
@@ -95,7 +96,7 @@ class BotUserStatisticsView(APIView):
     ],
     responses={200: SubscriptionPlanSerializer(many=True)},
 )
-class SubscriptionPlanListView(APIView):
+class SubscriptionPlanListView(BotProtectedAPIView):
     def get(self, request):
         telegram_id = request.query_params.get("telegram_id")
         user = get_telegram_user(telegram_id) if telegram_id else None
@@ -110,7 +111,7 @@ class SubscriptionPlanListView(APIView):
     request=AtmosOrderCreateSerializer,
     responses={201: AtmosOrderCreateResponseSerializer},
 )
-class AtmosOrderCreateView(APIView):
+class AtmosOrderCreateView(BotProtectedAPIView):
     def post(self, request):
         serializer = AtmosOrderCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -156,7 +157,7 @@ class AtmosCallbackView(APIView):
 
 
 @extend_schema(tags=["bot-users"], responses={200: AtmosOrderSerializer(many=True)})
-class BotUserOrdersView(APIView):
+class BotUserOrdersView(BotProtectedAPIView):
     def get(self, request, telegram_id):
         user = get_telegram_user(telegram_id)
         if not user:

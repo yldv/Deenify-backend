@@ -7,6 +7,7 @@ import aiohttp
 
 from core.constants import DEFAULT_LANGUAGE
 from core.languages import normalize_language_code
+from core.permissions import BOT_API_SECRET_HEADER
 
 logger = logging.getLogger(__name__)
 
@@ -44,14 +45,20 @@ class NotFoundError(ApiClientError):
 @dataclass
 class BackendApiClient:
     base_url: str
+    bot_api_secret: str = ""
 
     def __post_init__(self):
         self.base_url = self.base_url.rstrip("/")
 
+    def _auth_headers(self, headers: dict | None = None) -> dict:
+        merged = {"Accept": "application/json", **(headers or {})}
+        if self.bot_api_secret:
+            merged[BOT_API_SECRET_HEADER] = self.bot_api_secret
+        return merged
+
     async def _request(self, method: str, path: str, **kwargs):
         url = f"{self.base_url}{path}"
-        headers = kwargs.pop("headers", {})
-        headers.setdefault("Accept", "application/json")
+        headers = self._auth_headers(kwargs.pop("headers", None))
         try:
             async with aiohttp.ClientSession(headers=headers) as session:
                 async with session.request(method, url, **kwargs) as response:
@@ -115,6 +122,8 @@ class BackendApiClient:
             "url": url,
             "response_text": response_text,
         }
+        if status in (401, 403) and "bot api secret" in message.lower():
+            raise ApiClientError(f"Bot API authentication failed: {message}", **kwargs)
         if status == 402:
             raise PaymentRequiredError(message, **kwargs)
         if status == 403:

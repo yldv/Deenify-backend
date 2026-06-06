@@ -186,6 +186,8 @@ if not DEBUG and USE_HTTPS:
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+BOT_API_SECRET = os.environ.get('BOT_API_SECRET', '').strip()
+
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }

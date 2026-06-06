@@ -407,11 +407,21 @@ def calculate_atmos_sign(payload):
 
 def validate_atmos_callback_sign(payload):
     expected_sign = extract_callback_value(payload, "sign")
-    if not settings.ATMOS_API_KEY:
-        return True
-    if not expected_sign:
+    api_key = settings.ATMOS_API_KEY
+
+    if not api_key:
+        if settings.DEBUG and settings.ATMOS_TEST_MODE:
+            logger.warning("ATMOS_API_KEY is not set; accepting callback in DEBUG test mode.")
+            return True
+        logger.error("ATMOS_API_KEY is not configured; Atmos callback rejected.")
         return False
-    return hmac.compare_digest(str(expected_sign).lower(), calculate_atmos_sign(payload).lower())
+
+    if not expected_sign:
+        logger.warning("Atmos callback missing sign field.")
+        return False
+
+    calculated = calculate_atmos_sign(payload).lower()
+    return hmac.compare_digest(str(expected_sign).lower(), calculated)
 
 
 @transaction.atomic

@@ -2,8 +2,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.utils import translation
 from rest_framework import status
 from rest_framework.response import Response
-from rest_framework.views import APIView
-
+from core.bot_api import BotProtectedAPIView
 from core.api import (
     get_requested_language,
     get_telegram_user,
@@ -30,7 +29,7 @@ class TelegramUserMixin:
         return None
 
 
-class QuizAPIView(TelegramUserMixin, APIView):
+class QuizAPIView(TelegramUserMixin, BotProtectedAPIView):
     def payment_required_response(self, user, exc):
         return Response(
             {
