@@ -218,11 +218,7 @@ ATMOS_RETURN_URL = os.environ.get('ATMOS_RETURN_URL', '').strip()
 # API gateway (NOT partner.atmos.uz — that is only the merchant portal).
 ATMOS_BASE_URL = os.environ.get('ATMOS_BASE_URL', 'https://apigw.atmos.uz').rstrip('/')
 ATMOS_TEST_MODE = os.environ.get('ATMOS_TEST_MODE', 'False') == 'True'
-_default_checkout_url = (
-    'http://test-checkout.pays.uz/invoice/get'
-    if ATMOS_TEST_MODE
-    else 'https://checkout.pays.uz/invoice/get'
-)
+_default_checkout_url = 'https://checkout.pays.uz/invoice/get'
 # Empty ATMOS_CHECKOUT_URL= in .env must not override the test/prod default.
 _checkout_url_override = os.environ.get('ATMOS_CHECKOUT_URL', '').strip()
 ATMOS_CHECKOUT_URL = (_checkout_url_override or _default_checkout_url).rstrip('/')

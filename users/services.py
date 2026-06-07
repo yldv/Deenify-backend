@@ -173,21 +173,29 @@ class AtmosPaymentService:
             raise ValueError(raw)
         return access_token, raw
 
+    @staticmethod
+    def _normalize_checkout_url(url: str) -> str:
+        """test-checkout.pays.uz is unreachable; sandbox uses checkout.pays.uz."""
+        if not url:
+            return url
+        normalized = str(url).strip()
+        normalized = normalized.replace("http://test-checkout.pays.uz", "https://checkout.pays.uz")
+        normalized = normalized.replace("https://test-checkout.pays.uz", "https://checkout.pays.uz")
+        normalized = normalized.replace("http://checkout.pays.uz", "https://checkout.pays.uz")
+        return normalized
+
     def build_payment_url(self, transaction_id):
         checkout_base = self.checkout_url
         if not checkout_base:
-            checkout_base = (
-                "http://test-checkout.pays.uz/invoice/get"
-                if settings.ATMOS_TEST_MODE
-                else "https://checkout.pays.uz/invoice/get"
-            )
+            checkout_base = "https://checkout.pays.uz/invoice/get"
+        checkout_base = self._normalize_checkout_url(checkout_base).rstrip("/")
         query = {
             "storeId": self.store_id,
             "transactionId": transaction_id,
         }
         if self.return_url:
             query["redirectLink"] = self.return_url
-        return f"{checkout_base}?{urlencode(query)}"
+        return self._normalize_checkout_url(f"{checkout_base}?{urlencode(query)}")
 
     @staticmethod
     def _extract_transaction_id(raw: dict) -> str:
@@ -294,7 +302,7 @@ class AtmosPaymentService:
 
         api_error = self._extract_api_error(raw)
         transaction_id = self._extract_transaction_id(raw)
-        payment_url = self._extract_payment_url(raw)
+        payment_url = self._normalize_checkout_url(self._extract_payment_url(raw))
         if not payment_url and transaction_id:
             payment_url = self.build_payment_url(transaction_id)
 
