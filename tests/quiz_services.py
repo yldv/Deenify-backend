@@ -69,6 +69,22 @@ def _needs_subscription(user, answered_count, free_limit):
     return answered_count >= free_limit
 
 
+def _free_tier_exhausted(user):
+    """True when a non-premium user has used all free questions (lifetime)."""
+    if not _subscription_required() or user.has_active_premium():
+        return False
+    free_limit = _first_round_easy_count()
+    if user.free_tests_taken >= free_limit:
+        return True
+    return len(get_answered_test_ids(user)) >= free_limit
+
+
+def _record_free_question_usage(user):
+    if not _subscription_required() or user.has_active_premium():
+        return
+    user.register_free_test_usage()
+
+
 def _question_queryset():
     return get_active_tests_queryset().prefetch_related(
         Prefetch("answers", queryset=Answer.objects.order_by("sort_order", "id"))
@@ -126,6 +142,7 @@ def submit_quiz_answer(*, user, test_id, answer_id):
 
     is_correct = answer.is_correct
     UserAnsweredTest.objects.create(user=user, test=test, round=user.quiz_round)
+    _record_free_question_usage(user)
     progress = get_quiz_progress(user)
 
     return {
@@ -139,6 +156,9 @@ def submit_quiz_answer(*, user, test_id, answer_id):
 @transaction.atomic
 def reset_quiz_progress(user):
     """Clear all answered questions and start again from question 1."""
+    if _free_tier_exhausted(user):
+        raise PaymentRequired("Subscription is required to restart.")
+
     UserAnsweredTest.objects.filter(user=user).delete()
     if user.quiz_round != 1:
         user.quiz_round = 1
@@ -148,6 +168,9 @@ def reset_quiz_progress(user):
 
 @transaction.atomic
 def start_new_quiz_round(user):
+    if _free_tier_exhausted(user):
+        raise PaymentRequired("Subscription is required to start a new round.")
+
     total = get_total_active_questions()
     answered_count = len(get_answered_test_ids(user))
     if total == 0 or answered_count < total:

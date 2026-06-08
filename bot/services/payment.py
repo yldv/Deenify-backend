@@ -142,7 +142,8 @@ async def create_payment_link(
         return False
 
     await message.answer(
-        get_text(language, "subscribe_payment_ready"),
+        f"{get_text(language, 'subscribe_payment_ready')}\n\n{payment_url}",
         reply_markup=build_payment_url_keyboard(language, payment_url),
+        disable_web_page_preview=True,
     )
     return True

@@ -135,7 +135,7 @@ class QuizRestartView(QuizAPIView):
 
         try:
             progress = start_new_quiz_round(user)
-        except ValidationError as exc:
+        except (PaymentRequired, ValidationError, PermissionDenied) as exc:
             return self.handle_quiz_errors(user, exc)
 
         return Response(progress, status=status.HTTP_200_OK)
@@ -157,4 +157,9 @@ class QuizResetView(QuizAPIView):
         if blocked:
             return blocked
 
-        return Response(reset_quiz_progress(user), status=status.HTTP_200_OK)
+        try:
+            progress = reset_quiz_progress(user)
+        except (PaymentRequired, PermissionDenied) as exc:
+            return self.handle_quiz_errors(user, exc)
+
+        return Response(progress, status=status.HTTP_200_OK)

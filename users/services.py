@@ -308,28 +308,69 @@ class AtmosPaymentService:
             return f"Atmos HTTP {raw['http_status']}"
         return ""
 
-    def _build_invoice_payload(self, order):
+    @staticmethod
+    def _ofd_item_details():
+        """OFD detail keys from Atmos docs (checkout/invoice/create)."""
+        return [
+            {"name": "package_code", "values": "1"},
+            {"name": "mark_code", "values": "0"},
+            {"name": "tin", "values": "0"},
+            {"name": "discount", "values": "0"},
+            {"name": "quantity", "values": "1"},
+        ]
+
+    def _build_invoice_item(self, *, plan_name: str, amount_tiyin: int) -> dict:
+        return {
+            "items_id": "1",
+            "code": "premium",
+            "name": str(plan_name)[:255],
+            "amount": amount_tiyin,
+            "quantity": 1,
+            "details": self._ofd_item_details(),
+        }
+
+    def _build_invoice_payload(self, order, *, use_doc_items_field: bool = False):
+        """Build body for POST /checkout/invoice/create (docs.atmos.uz #ac6a13b73b)."""
         amount_tiyin = amount_to_tiyin(order.amount)
         plan_name = "Deenify Premium"
         if getattr(order, "plan", None):
             plan_name = order.plan.name or plan_name
         request_id = (order.merchant_order_id or order.order_id or uuid4().hex)[:64]
-        return {
+        item = self._build_invoice_item(plan_name=plan_name, amount_tiyin=amount_tiyin)
+        payload = {
             "request_id": request_id,
             "store_id": int(self._normalize_store_id(self.store_id)),
             "account": order.merchant_order_id,
             "amount": amount_tiyin,
             "success_url": self.return_url or "https://t.me/DeenifyUzBot",
-            "payment_items": [
-                {
-                    "items_id": "1",
-                    "name": str(plan_name)[:255],
-                    "amount": amount_tiyin,
-                    "quantity": 1,
-                    "details": [{"name": "service", "values": "subscription"}],
-                }
-            ],
+            "expiration_time": 60,
         }
+        # Docs use "items"; sandbox API currently accepts "payment_items".
+        if use_doc_items_field:
+            payload["items"] = [item]
+        else:
+            payload["payment_items"] = [item]
+        return payload
+
+    def _create_invoice(self, order, access_token):
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/json",
+        }
+        for use_doc_items in (False, True):
+            payload = self._build_invoice_payload(order, use_doc_items_field=use_doc_items)
+            raw = self._request_json(
+                "/checkout/invoice/create",
+                payload=payload,
+                headers=headers,
+            )
+            api_error = self._extract_api_error(raw)
+            payment_url = self._extract_payment_url(raw)
+            if payment_url or not api_error:
+                return raw, payload
+            if str(api_error).find("-999998") == -1:
+                return raw, payload
+        return raw, payload
 
     @staticmethod
     def _normalize_store_id(store_id):
@@ -370,14 +411,7 @@ class AtmosPaymentService:
 
         try:
             access_token, token_response = self.get_access_token()
-            raw = self._request_json(
-                "/checkout/invoice/create",
-                payload=payload,
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/json",
-                },
-            )
+            raw, payload = self._create_invoice(order, access_token)
         except (OSError, URLError, KeyError, ValueError) as exc:
             error_detail = self._format_request_error(exc)
             logger.exception(
