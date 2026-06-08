@@ -213,6 +213,8 @@ ATMOS_TERMINAL_ID = os.environ.get('ATMOS_TERMINAL_ID', '').strip()
 ATMOS_CONSUMER_KEY = os.environ.get('ATMOS_CONSUMER_KEY', '').strip()
 ATMOS_CONSUMER_SECRET = os.environ.get('ATMOS_CONSUMER_SECRET', '').strip()
 ATMOS_API_KEY = os.environ.get('ATMOS_API_KEY', '').strip()
+# Widget checkout key (partner-test.atmos.uz). Falls back to ATMOS_API_KEY.
+ATMOS_CHECKOUT_KEY = os.environ.get('ATMOS_CHECKOUT_KEY', '').strip() or ATMOS_API_KEY
 ATMOS_CALLBACK_URL = os.environ.get('ATMOS_CALLBACK_URL', '').strip()
 ATMOS_RETURN_URL = os.environ.get('ATMOS_RETURN_URL', '').strip()
 # API gateway (NOT partner.atmos.uz — that is only the merchant portal).
