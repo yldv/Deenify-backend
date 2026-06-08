@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from bot.api_client import ApiClientError
-from bot.handlers.start import show_home_menu, user_full_name
+from bot.handlers.common import show_home_menu, user_full_name
 from bot.keyboards import phone_keyboard
 from bot.states import RegistrationState
 from bot.texts import get_text, normalize_language

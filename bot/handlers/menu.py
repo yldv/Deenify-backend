@@ -6,7 +6,7 @@ from aiogram.types import Message
 from bot.context import preserve_language
 from bot.handlers.help import open_help
 from bot.handlers.settings import open_settings
-from bot.handlers.start import show_home_menu
+from bot.handlers.common import show_home_menu
 router = Router()
 
 
@@ -22,5 +22,5 @@ async def cmd_help(message: Message, state: FSMContext):
 
 
 @router.message(Command("settings"))
-async def cmd_settings(message: Message, state: FSMContext, api_client):
-    await open_settings(message, state, api_client)
+async def cmd_settings(message: Message, state: FSMContext):
+    await open_settings(message, state)

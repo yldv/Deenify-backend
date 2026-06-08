@@ -6,7 +6,7 @@ from aiogram.types import Message
 
 from bot.config import BotConfig
 from bot.context import get_language, preserve_language
-from bot.handlers.start import show_home_menu
+from bot.handlers.common import show_home_menu
 from bot.keyboards import cancel_keyboard, help_keyboard, home_keyboard
 from bot.states import HelpState
 from bot.texts import all_button_texts, get_text

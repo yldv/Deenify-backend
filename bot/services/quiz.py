@@ -4,6 +4,7 @@ from aiogram.fsm.context import FSMContext
 
 from bot.api_client import ApiClientError, BlockedUserError, NotFoundError, PaymentRequiredError
 from bot.keyboards import home_keyboard
+from bot.services.payment import send_subscription_offers
 from bot.poll_sessions import remember_poll
 from bot.states import TakingTest
 from bot.texts import get_text
@@ -59,6 +60,13 @@ class QuizMessenger:
                 chat_id,
                 get_text(language, "quiz_subscription_required", free_limit=free_limit),
                 reply_markup=home_keyboard(language),
+            )
+            await send_subscription_offers(
+                bot=bot,
+                chat_id=chat_id,
+                language=language,
+                api_client=self.api,
+                telegram_id=chat_id,
             )
             return False
         if isinstance(exc, BlockedUserError):

@@ -6,8 +6,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from bot.api_client import ApiClientError, NotFoundError
-from bot.keyboards import home_keyboard, language_keyboard, phone_keyboard
+from bot.handlers.common import show_home_menu, user_full_name
 from bot.handlers.settings import show_settings_menu
+from bot.keyboards import home_keyboard, language_keyboard, phone_keyboard
 from bot.states import ChoosingLanguage, RegistrationState
 from bot.texts import (
     LANGUAGE_BUTTON_TEXTS,
@@ -18,18 +19,6 @@ from bot.texts import (
 
 router = Router()
 logger = logging.getLogger(__name__)
-
-
-def user_full_name(message: Message) -> str:
-    parts = [message.from_user.first_name or "", message.from_user.last_name or ""]
-    return " ".join(part for part in parts if part).strip()
-
-
-async def show_home_menu(message: Message, language: str):
-    await message.answer(
-        get_text(language, "home_menu"),
-        reply_markup=home_keyboard(language),
-    )
 
 
 @router.message(CommandStart())
@@ -72,7 +61,7 @@ async def language_selected(message: Message, state: FSMContext, api_client):
             await state.update_data(return_to=None)
             await message.answer(get_text(language, "language_updated"))
             if return_to == "settings":
-                await show_settings_menu(message, state, language, user)
+                await show_settings_menu(message, state, language)
             else:
                 await state.clear()
                 await show_home_menu(message, language)

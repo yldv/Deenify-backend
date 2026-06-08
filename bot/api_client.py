@@ -215,3 +215,17 @@ class BackendApiClient:
             json={"telegram_id": telegram_id},
         )
 
+    async def list_subscription_plans(self, *, telegram_id):
+        return await self._request(
+            "GET",
+            "/subscriptions/plans/",
+            params={"telegram_id": telegram_id},
+        )
+
+    async def create_payment_order(self, *, telegram_id, plan_id):
+        return await self._request(
+            "POST",
+            "/payments/atmos/orders/",
+            json={"telegram_id": telegram_id, "plan_id": plan_id},
+        )
+

@@ -98,8 +98,14 @@ TEXTS = {
         "quiz_reset_hint": "✨ Test boshidan boshlandi.",
         "quiz_subscription_required": (
             "🔒 Bepul {free_limit} ta savoldan keyin davom etish uchun obuna kerak.\n"
-            "Holatni ko'rish uchun «⚙️ Sozlamalar» bo'limiga o'ting."
+            "Quyida tarifni tanlang va to'lovni amalga oshiring."
         ),
+        "subscribe_prompt": "💳 Obuna tarifini tanlang:",
+        "subscribe_plan_button": "{name} — {price} UZS",
+        "subscribe_pay_link": "💳 To'lov qilish",
+        "subscribe_payment_ready": "✅ To'lov uchun quyidagi tugmani bosing:",
+        "subscribe_payment_failed": "❌ To'lov havolasi yaratilmadi.",
+        "subscribe_no_plans": "❌ Hozircha obuna tariflari mavjud emas.",
         "quiz_restart_hint": "✨ Test qayta boshlandi. Barcha savollar boshidan, tasodifiy tartibda.",
         "quiz_session_expired": (
             "⏳ Bu savol muddati tugadi (bot qayta ishga tushgan bo'lishi mumkin).\n"
@@ -181,8 +187,14 @@ TEXTS = {
         "quiz_reset_hint": "✨ Тест бошидан бошланди.",
         "quiz_subscription_required": (
             "🔒 Бепул {free_limit} та саволдан кейин давом этиш учун обуна керак.\n"
-            "Ҳолатни кўриш учун «⚙️ Созламалар» бўлимига ўтинг."
+            "Қуйида тарифни танланг ва тўловни амалга оширинг."
         ),
+        "subscribe_prompt": "💳 Обuna tarifini tanlang:",
+        "subscribe_plan_button": "{name} — {price} UZS",
+        "subscribe_pay_link": "💳 To'lov qilish",
+        "subscribe_payment_ready": "✅ To'lov uchun quyidagi tugmani bosing:",
+        "subscribe_payment_failed": "❌ To'lov havolasi yaratilmadi.",
+        "subscribe_no_plans": "❌ Hozircha obuna tariflari mavjud emas.",
         "quiz_restart_hint": "✨ Тест қайта бошланди. Барча саволлар бошидан, тасодифий тартибда.",
         "quiz_session_expired": (
             "⏳ Бу savolning muddati tugadi (bot qayta ishga tushgan bo'lishi mumkin).\n"
@@ -265,8 +277,14 @@ TEXTS = {
         "quiz_reset_hint": "✨ Тест начат с начала.",
         "quiz_subscription_required": (
             "🔒 После {free_limit} бесплатных вопросов нужна подписка.\n"
-            "Статус смотрите в разделе «⚙️ Настройки»."
+            "Выберите тариф ниже и оплатите."
         ),
+        "subscribe_prompt": "💳 Выберите тариф подписки:",
+        "subscribe_plan_button": "{name} — {price} UZS",
+        "subscribe_pay_link": "💳 Оплатить",
+        "subscribe_payment_ready": "✅ Нажмите кнопку ниже для оплаты:",
+        "subscribe_payment_failed": "❌ Не удалось создать ссылку на оплату.",
+        "subscribe_no_plans": "❌ Тарифы подписки пока недоступны.",
         "quiz_restart_hint": "✨ Тест начат заново. Все вопросы с начала, в случайном порядке.",
         "blocked": "Аккаунт заблокирован.",
         "not_found": "Данные не найдены. Нажмите /start.",
