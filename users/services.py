@@ -250,16 +250,14 @@ class AtmosPaymentService:
         if not url:
             return url
         normalized = str(url).strip()
-        # Normalize only scheme, not the host.
-        # Docs: sandbox uses test-checkout.pays.uz, production uses checkout.pays.uz.
+        # Always use HTTPS — Telegram in-app browser on iOS shows a blank page for http checkout.
         normalized = normalized.replace("http://checkout.pays.uz", "https://checkout.pays.uz")
-        # If Atmos returns https test-checkout, switch back to http (as in docs).
-        normalized = normalized.replace("https://test-checkout.pays.uz", "http://test-checkout.pays.uz")
+        normalized = normalized.replace("http://test-checkout.pays.uz", "https://test-checkout.pays.uz")
         return normalized
 
     def _default_checkout_base(self) -> str:
         if settings.ATMOS_TEST_MODE:
-            return "http://test-checkout.pays.uz/invoice/get"
+            return "https://test-checkout.pays.uz/invoice/get"
         return "https://checkout.pays.uz/invoice/get"
 
     def build_payment_url(self, transaction_id):
@@ -467,6 +465,23 @@ def create_atmos_order(*, user, plan):
         )
     )
     return order
+
+
+def build_bot_payment_url(order):
+    """Public HTTPS link for Telegram; redirects to the real Atmos checkout URL."""
+    payment_url = (order.payment_url or "").strip()
+    if not payment_url:
+        return ""
+    callback = settings.ATMOS_CALLBACK_URL.strip()
+    if not callback:
+        return AtmosPaymentService._normalize_checkout_url(payment_url)
+    from urllib.parse import urlparse
+
+    parsed = urlparse(callback)
+    if not parsed.scheme or not parsed.netloc:
+        return AtmosPaymentService._normalize_checkout_url(payment_url)
+    base = f"{parsed.scheme}://{parsed.netloc}"
+    return f"{base}/api/v1/payments/atmos/checkout/{order.order_id}/"
 
 
 def extract_callback_value(payload, *keys):

@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     AdminStatisticsView,
     AtmosCallbackView,
+    AtmosCheckoutRedirectView,
     AtmosOrderCreateView,
     BotUserDetailView,
     BotUserLanguageView,
@@ -48,6 +49,11 @@ urlpatterns = [
         "api/v1/payments/atmos/callback/",
         AtmosCallbackView.as_view(),
         name="atmos-callback",
+    ),
+    path(
+        "api/v1/payments/atmos/checkout/<str:order_id>/",
+        AtmosCheckoutRedirectView.as_view(),
+        name="atmos-checkout-redirect",
     ),
     path(
         "api/v1/admin/statistics/",

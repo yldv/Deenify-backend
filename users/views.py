@@ -1,3 +1,5 @@
+from django.http import HttpResponseNotFound
+from django.shortcuts import redirect
 from django.utils import translation
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -20,6 +22,7 @@ from .serializers import (
     TelegramUserUpsertSerializer,
 )
 from .services import (
+    AtmosPaymentService,
     create_atmos_order,
     get_active_plan,
     get_admin_statistics,
@@ -141,6 +144,18 @@ class AtmosOrderCreateView(BotProtectedAPIView):
     request=OpenApiTypes.OBJECT,
     responses={200: OpenApiTypes.OBJECT},
 )
+class AtmosCheckoutRedirectView(APIView):
+    authentication_classes = ()
+    permission_classes = ()
+
+    def get(self, request, order_id):
+        order = AtmosOrder.objects.filter(order_id=order_id).first()
+        if not order or not order.payment_url:
+            return HttpResponseNotFound("Payment link not found.")
+        target = AtmosPaymentService._normalize_checkout_url(order.payment_url)
+        return redirect(target)
+
+
 class AtmosCallbackView(APIView):
     authentication_classes = ()
     permission_classes = ()

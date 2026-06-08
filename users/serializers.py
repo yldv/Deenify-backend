@@ -111,6 +111,7 @@ class AtmosOrderSerializer(serializers.ModelSerializer):
 
 class AtmosOrderCreateResponseSerializer(serializers.ModelSerializer):
     payment_error = serializers.SerializerMethodField()
+    payment_url = serializers.SerializerMethodField()
 
     class Meta:
         model = AtmosOrder
@@ -122,6 +123,11 @@ class AtmosOrderCreateResponseSerializer(serializers.ModelSerializer):
             "payment_url",
             "payment_error",
         )
+
+    def get_payment_url(self, obj):
+        from .services import build_bot_payment_url
+
+        return build_bot_payment_url(obj)
 
     def get_payment_error(self, obj):
         if obj.payment_url:
