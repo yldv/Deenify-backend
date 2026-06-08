@@ -1,6 +1,5 @@
-from django.conf import settings
 from django.http import HttpResponseNotFound
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect
 from django.utils import translation
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -24,7 +23,6 @@ from .serializers import (
 )
 from .services import (
     AtmosPaymentService,
-    amount_to_tiyin,
     create_atmos_order,
     get_active_plan,
     get_admin_statistics,
@@ -154,30 +152,6 @@ class AtmosCheckoutRedirectView(APIView):
         order = AtmosOrder.objects.filter(order_id=order_id).first()
         if not order or not order.payment_url:
             return HttpResponseNotFound("Payment link not found.")
-
-        if settings.ATMOS_TEST_MODE:
-            # dev-checkout.atmos.uz is unreachable from many networks; host widget on our HTTPS.
-            checkout_js = (
-                "https://cdn.pays.uz/checkout/js/v1.0.1/test-checkout.js"
-                if settings.ATMOS_TEST_MODE
-                else "https://cdn.pays.uz/checkout/js/v1.0.1/checkout.js"
-            )
-            terminal_id = (settings.ATMOS_TERMINAL_ID or "").strip()
-            return render(
-                request,
-                "payments/atmos_checkout.html",
-                {
-                    "store_id": settings.ATMOS_STORE_ID,
-                    "account": order.merchant_order_id,
-                    "amount": amount_to_tiyin(order.amount),
-                    "terminal_id": terminal_id if terminal_id.isdigit() else "",
-                    "success_redirect": settings.ATMOS_RETURN_URL,
-                    "fail_redirect": settings.ATMOS_RETURN_URL,
-                    "checkout_key": settings.ATMOS_CHECKOUT_KEY,
-                    "checkout_js_url": checkout_js,
-                    "lang": "uz",
-                },
-            )
 
         target = AtmosPaymentService._normalize_checkout_url(order.payment_url)
         return redirect(target)

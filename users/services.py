@@ -343,8 +343,8 @@ class AtmosPaymentService:
             "account": order.merchant_order_id,
             "amount": amount_tiyin,
             "success_url": self.return_url or "https://t.me/DeenifyUzBot",
-            # Sandbox treats this as seconds (~60 was 1 minute); allow 24h to pay.
-            "expiration_time": 86400,
+            # Docs: expiration_time in minutes (optional).
+            "expiration_time": 60,
         }
         # Docs use "items"; sandbox API currently accepts "payment_items".
         if use_doc_items_field:
@@ -515,22 +515,11 @@ def create_atmos_order(*, user, plan):
     return order
 
 
-def _public_site_base_url() -> str:
-    callback = (settings.ATMOS_CALLBACK_URL or "").strip().rstrip("/")
-    if callback and "/api/" in callback:
-        return callback.split("/api/", 1)[0]
-    return ""
-
-
 def build_bot_payment_url(order):
-    """Bot opens our HTTPS checkout page (widget), not dev-checkout.atmos.uz."""
+    """URL from POST /checkout/invoice/create response (docs.atmos.uz), used as-is."""
     payment_url = (order.payment_url or "").strip()
     if not payment_url:
         return ""
-    if settings.ATMOS_TEST_MODE and order.order_id:
-        base = _public_site_base_url()
-        if base:
-            return f"{base}/api/v1/payments/atmos/checkout/{order.order_id}/"
     return AtmosPaymentService._normalize_checkout_url(payment_url)
 
 
