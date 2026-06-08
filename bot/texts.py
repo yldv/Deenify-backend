@@ -98,14 +98,56 @@ TEXTS = {
         "quiz_reset_hint": "✨ Test boshidan boshlandi.",
         "quiz_subscription_required": (
             "🔒 Bepul {free_limit} ta savoldan keyin davom etish uchun obuna kerak.\n"
-            "Quyida tarifni tanlang va to'lovni amalga oshiring."
+            "Quyida tariflarni ko'ring va mosini tanlang."
         ),
-        "subscribe_prompt": "💳 Obuna tarifini tanlang:",
-        "subscribe_plan_button_monthly": "{name} — {price} UZS/oy",
-        "subscribe_plan_button_yearly": "{name} — {monthly_price} UZS/oy × {months}",
+        "subscribe_catalog_header": (
+            "⭐ Deenify Premium\n\n"
+            "✅ Cheksiz testlar\n"
+            "✅ Barcha savollarga kirish\n"
+            "✅ Yangi testlar qo'shilganda avtomatik ochiladi"
+        ),
+        "subscribe_catalog_yearly": (
+            "📅 Yillik — {monthly_price} so'm/oy\n"
+            "   {months} oy • {total_price} so'm jami"
+        ),
+        "subscribe_catalog_yearly_discount": (
+            "📅 Yillik — {monthly_price} so'm/oy  ·  -{discount}%\n"
+            "   {months} oy • {total_price} so'm jami"
+        ),
+        "subscribe_catalog_monthly": "📅 Oylik — {price} so'm/oy\n   Har oy alohida to'lov",
+        "subscribe_catalog_footer": "👇 Tarifni tanlang:",
+        "subscribe_plan_button_monthly": "Oylik · {price} so'm/oy",
+        "subscribe_plan_button_yearly": "Yillik · {monthly_price} so'm/oy",
+        "subscribe_plan_button_yearly_discount": "Yillik · {monthly_price} so'm/oy · -{discount}%",
         "subscribe_plan_button": "{name} — {price} UZS",
-        "subscribe_pay_link": "💳 To'lov qilish",
-        "subscribe_payment_ready": "✅ To'lov uchun quyidagi tugmani bosing:",
+        "subscribe_pay_link": "💳 {price} so'm to'lash",
+        "subscribe_payment_ready_monthly": (
+            "✅ {plan_name} tanlandi\n\n"
+            "💰 To'lov: {total_price} so'm\n"
+            "📆 1 oylik obuna\n\n"
+            "To'lov tugmasini bosing — karta ma'lumotlarini sahifada kiritasiz.\n"
+            "To'lovdan keyin obuna avtomatik faollashadi."
+        ),
+        "subscribe_payment_ready_yearly": (
+            "✅ {plan_name} tanlandi\n\n"
+            "💰 To'lov: {total_price} so'm\n"
+            "📆 {months} oylik obuna · {monthly_price} so'm/oy\n\n"
+            "To'lov tugmasini bosing — karta ma'lumotlarini sahifada kiritasiz.\n"
+            "To'lovdan keyin obuna avtomatik faollashadi."
+        ),
+        "subscribe_payment_ready_yearly_discount": (
+            "✅ {plan_name} tanlandi\n\n"
+            "💰 To'lov: {total_price} so'm\n"
+            "📆 {months} oylik obuna · {monthly_price} so'm/oy · -{discount}%\n\n"
+            "To'lov tugmasini bosing — karta ma'lumotlarini sahifada kiritasiz.\n"
+            "To'lovdan keyin obuna avtomatik faollashadi."
+        ),
+        "subscribe_test_card_hint": (
+            "🧪 Test karta (sandbox):\n"
+            "Karta: {card}\n"
+            "Muddat: {expiry}\n"
+            "SMS kod: {otp}"
+        ),
         "subscribe_payment_failed": "❌ To'lov havolasi yaratilmadi.",
         "subscribe_no_plans": "❌ Hozircha obuna tariflari mavjud emas.",
         "quiz_restart_hint": "✨ Test qayta boshlandi. Barcha savollar boshidan, tasodifiy tartibda.",
@@ -191,14 +233,56 @@ TEXTS = {
             "🔒 Бепул {free_limit} та саволдан кейин давом этиш учун обуна керак.\n"
             "Қуйида тарифни танланг ва тўловни амалга оширинг."
         ),
-        "subscribe_prompt": "💳 Обuna tarifini tanlang:",
-        "subscribe_plan_button_monthly": "{name} — {price} UZS/oy",
-        "subscribe_plan_button_yearly": "{name} — {monthly_price} UZS/oy × {months}",
+        "subscribe_catalog_header": (
+            "⭐ Deenify Premium\n\n"
+            "✅ Чексиз тестлар\n"
+            "✅ Барча саволларга кириш\n"
+            "✅ Янги тестлар қўшилади"
+        ),
+        "subscribe_catalog_yearly": (
+            "📅 Йиллик — {monthly_price} so'm/ой\n"
+            "   {months} ой • {total_price} so'm жами"
+        ),
+        "subscribe_catalog_yearly_discount": (
+            "📅 Йиллик — {monthly_price} so'm/ой  ·  -{discount}%\n"
+            "   {months} ой • {total_price} so'm жами"
+        ),
+        "subscribe_catalog_monthly": "📅 Ойлик — {price} so'm/ой\n   Ҳар ой алоҳида тўлов",
+        "subscribe_catalog_footer": "👇 Тарифни танланг:",
+        "subscribe_plan_button_monthly": "Ойлик · {price} so'm/ой",
+        "subscribe_plan_button_yearly": "Йиллик · {monthly_price} so'm/ой",
+        "subscribe_plan_button_yearly_discount": "Йиллик · {monthly_price} so'm/ой · -{discount}%",
         "subscribe_plan_button": "{name} — {price} UZS",
-        "subscribe_pay_link": "💳 To'lov qilish",
-        "subscribe_payment_ready": "✅ To'lov uchun quyidagi tugmani bosing:",
-        "subscribe_payment_failed": "❌ To'lov havolasi yaratilmadi.",
-        "subscribe_no_plans": "❌ Hozircha obuna tariflari mavjud emas.",
+        "subscribe_pay_link": "💳 {price} so'm тўлаш",
+        "subscribe_payment_ready_monthly": (
+            "✅ {plan_name} танланди\n\n"
+            "💰 Тўлов: {total_price} so'm\n"
+            "📆 1 ойлик обуна\n\n"
+            "Тўлов тугмасини босинг — карта маълумотларини саҳифада киритасиз.\n"
+            "Тўловдан кейин обуна автоматик фаоллашади."
+        ),
+        "subscribe_payment_ready_yearly": (
+            "✅ {plan_name} танланди\n\n"
+            "💰 Тўлов: {total_price} so'm\n"
+            "📆 {months} ойлик обуна · {monthly_price} so'm/ой\n\n"
+            "Тўлов тугмасини босинг — карта маълумотларини саҳифада киритасиз.\n"
+            "Тўловдан кейин обуна автоматик фаоллашади."
+        ),
+        "subscribe_payment_ready_yearly_discount": (
+            "✅ {plan_name} танланди\n\n"
+            "💰 Тўлов: {total_price} so'm\n"
+            "📆 {months} ойлик обуна · {monthly_price} so'm/ой · -{discount}%\n\n"
+            "Тўлов тугмасини босинг — карта маълумотларини саҳифада киритасиз.\n"
+            "Тўловдан кейин обуна автоматик фаоллашади."
+        ),
+        "subscribe_test_card_hint": (
+            "🧪 Тест карта (sandbox):\n"
+            "Карта: {card}\n"
+            "Муддат: {expiry}\n"
+            "SMS код: {otp}"
+        ),
+        "subscribe_payment_failed": "❌ Тўлов ҳаволаси яратилмади.",
+        "subscribe_no_plans": "❌ Ҳозирча обуна тарифлари мавжуд эмас.",
         "quiz_restart_hint": "✨ Тест қайта бошланди. Барча саволлар бошидан, тасодифий тартибда.",
         "quiz_session_expired": (
             "⏳ Бу savolning muddati tugadi (bot qayta ishga tushgan bo'lishi mumkin).\n"
@@ -283,12 +367,54 @@ TEXTS = {
             "🔒 После {free_limit} бесплатных вопросов нужна подписка.\n"
             "Выберите тариф ниже и оплатите."
         ),
-        "subscribe_prompt": "💳 Выберите тариф подписки:",
-        "subscribe_plan_button_monthly": "{name} — {price} UZS/мес",
-        "subscribe_plan_button_yearly": "{name} — {monthly_price} UZS/мес × {months}",
+        "subscribe_catalog_header": (
+            "⭐ Deenify Premium\n\n"
+            "✅ Безлимитные тесты\n"
+            "✅ Доступ ко всем вопросам\n"
+            "✅ Новые тесты открываются автоматически"
+        ),
+        "subscribe_catalog_yearly": (
+            "📅 Годовой — {monthly_price} сум/мес\n"
+            "   {months} мес. • {total_price} сум итого"
+        ),
+        "subscribe_catalog_yearly_discount": (
+            "📅 Годовой — {monthly_price} сум/мес  ·  -{discount}%\n"
+            "   {months} мес. • {total_price} сум итого"
+        ),
+        "subscribe_catalog_monthly": "📅 Месячный — {price} сум/мес\n   Оплата каждый месяц",
+        "subscribe_catalog_footer": "👇 Выберите тариф:",
+        "subscribe_plan_button_monthly": "Месяц · {price} сум/мес",
+        "subscribe_plan_button_yearly": "Год · {monthly_price} сум/мес",
+        "subscribe_plan_button_yearly_discount": "Год · {monthly_price} сум/мес · -{discount}%",
         "subscribe_plan_button": "{name} — {price} UZS",
-        "subscribe_pay_link": "💳 Оплатить",
-        "subscribe_payment_ready": "✅ Нажмите кнопку ниже для оплаты:",
+        "subscribe_pay_link": "💳 Оплатить {price} сум",
+        "subscribe_payment_ready_monthly": (
+            "✅ Выбран: {plan_name}\n\n"
+            "💰 К оплате: {total_price} сум\n"
+            "📆 Подписка на 1 месяц\n\n"
+            "Нажмите кнопку оплаты — введите карту на странице.\n"
+            "После оплаты подписка активируется автоматически."
+        ),
+        "subscribe_payment_ready_yearly": (
+            "✅ Выбран: {plan_name}\n\n"
+            "💰 К оплате: {total_price} сум\n"
+            "📆 Подписка на {months} мес. · {monthly_price} сум/мес\n\n"
+            "Нажмите кнопку оплаты — введите карту на странице.\n"
+            "После оплаты подписка активируется автоматически."
+        ),
+        "subscribe_payment_ready_yearly_discount": (
+            "✅ Выбран: {plan_name}\n\n"
+            "💰 К оплате: {total_price} сум\n"
+            "📆 Подписка на {months} мес. · {monthly_price} сум/мес · -{discount}%\n\n"
+            "Нажмите кнопку оплаты — введите карту на странице.\n"
+            "После оплаты подписка активируется автоматически."
+        ),
+        "subscribe_test_card_hint": (
+            "🧪 Тестовая карта (sandbox):\n"
+            "Карта: {card}\n"
+            "Срок: {expiry}\n"
+            "SMS-код: {otp}"
+        ),
         "subscribe_payment_failed": "❌ Не удалось создать ссылку на оплату.",
         "subscribe_no_plans": "❌ Тарифы подписки пока недоступны.",
         "quiz_restart_hint": "✨ Тест начат заново. Все вопросы с начала, в случайном порядке.",
