@@ -423,8 +423,8 @@ def validate_atmos_callback_sign(payload):
     api_key = settings.ATMOS_API_KEY
 
     if not api_key:
-        if settings.DEBUG and settings.ATMOS_TEST_MODE:
-            logger.warning("ATMOS_API_KEY is not set; accepting callback in DEBUG test mode.")
+        if settings.ATMOS_TEST_MODE:
+            logger.warning("ATMOS_API_KEY is not set; accepting callback in ATMOS_TEST_MODE.")
             return True
         logger.error("ATMOS_API_KEY is not configured; Atmos callback rejected.")
         return False
