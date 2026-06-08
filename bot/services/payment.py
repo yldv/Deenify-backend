@@ -16,9 +16,9 @@ def normalize_payment_url(url: str) -> str:
     if not url:
         return url
     normalized = str(url).strip()
-    normalized = normalized.replace("http://test-checkout.pays.uz", "https://checkout.pays.uz")
-    normalized = normalized.replace("https://test-checkout.pays.uz", "https://checkout.pays.uz")
     normalized = normalized.replace("http://checkout.pays.uz", "https://checkout.pays.uz")
+    # If Atmos returns test-checkout as https, switch to http (per docs).
+    normalized = normalized.replace("https://test-checkout.pays.uz", "http://test-checkout.pays.uz")
     return normalized
 
 

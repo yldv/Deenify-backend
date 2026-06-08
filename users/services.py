@@ -250,13 +250,16 @@ class AtmosPaymentService:
         if not url:
             return url
         normalized = str(url).strip()
-        # test-checkout.pays.uz is often unreachable; sandbox uses checkout.pays.uz.
-        normalized = normalized.replace("http://test-checkout.pays.uz", "https://checkout.pays.uz")
-        normalized = normalized.replace("https://test-checkout.pays.uz", "https://checkout.pays.uz")
+        # Normalize only scheme, not the host.
+        # Docs: sandbox uses test-checkout.pays.uz, production uses checkout.pays.uz.
         normalized = normalized.replace("http://checkout.pays.uz", "https://checkout.pays.uz")
+        # If Atmos returns https test-checkout, switch back to http (as in docs).
+        normalized = normalized.replace("https://test-checkout.pays.uz", "http://test-checkout.pays.uz")
         return normalized
 
     def _default_checkout_base(self) -> str:
+        if settings.ATMOS_TEST_MODE:
+            return "http://test-checkout.pays.uz/invoice/get"
         return "https://checkout.pays.uz/invoice/get"
 
     def build_payment_url(self, transaction_id):
