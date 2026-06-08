@@ -10,7 +10,6 @@ from bot.texts import get_text
 logger = logging.getLogger(__name__)
 
 PLAN_CALLBACK_PREFIX = "pay_plan:"
-PAY_CONFIRM_PREFIX = "pay_confirm:"
 
 
 def normalize_payment_url(url: str) -> str:
@@ -73,13 +72,13 @@ def build_plan_choice_keyboard(language: str, plans: list[dict]) -> InlineKeyboa
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def build_pay_confirm_keyboard(language: str, plan_id: int) -> InlineKeyboardMarkup:
+def build_payment_url_keyboard(language: str, payment_url: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text=get_text(language, "subscribe_pay_link"),
-                    callback_data=f"{PAY_CONFIRM_PREFIX}{plan_id}",
+                    url=normalize_payment_url(payment_url),
                 )
             ],
         ]
@@ -113,26 +112,14 @@ async def send_subscription_offers(
     return True
 
 
-async def send_plan_payment_prompt(
+async def create_payment_link(
     *,
     message: Message,
     language: str,
-    plan_id: int,
-) -> None:
-    """After plan is chosen — show pay button (order is created only on click)."""
-    await message.answer(
-        get_text(language, "subscribe_payment_ready"),
-        reply_markup=build_pay_confirm_keyboard(language, plan_id),
-    )
-
-
-async def resolve_payment_url(
-    *,
     api_client,
     telegram_id: int,
     plan_id: int,
-) -> tuple[str, str]:
-    """Create Atmos invoice and return (payment_url, error_message)."""
+) -> bool:
     try:
         order = await api_client.create_payment_order(telegram_id=telegram_id, plan_id=plan_id)
     except ApiClientError as exc:
@@ -142,13 +129,25 @@ async def resolve_payment_url(
             plan_id,
             exc.status,
         )
+        error_text = get_text(language, "subscribe_payment_failed")
         payload = exc.payload if isinstance(exc.payload, dict) else {}
-        payment_error = payload.get("payment_error") or payload.get("detail") or ""
-        return "", payment_error
+        payment_error = payload.get("payment_error") or payload.get("detail")
+        if payment_error:
+            error_text = f"{error_text}\n{payment_error}"
+        await message.answer(error_text)
+        return False
 
     payment_url = normalize_payment_url(order.get("payment_url") or "")
-    if payment_url:
-        return payment_url, ""
+    if not payment_url:
+        error_text = get_text(language, "subscribe_payment_failed")
+        payment_error = order.get("payment_error")
+        if payment_error:
+            error_text = f"{error_text}\n{payment_error}"
+        await message.answer(error_text)
+        return False
 
-    payment_error = order.get("payment_error") or ""
-    return "", payment_error
+    await message.answer(
+        get_text(language, "subscribe_payment_ready"),
+        reply_markup=build_payment_url_keyboard(language, payment_url),
+    )
+    return True
