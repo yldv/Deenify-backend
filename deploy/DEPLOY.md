@@ -156,10 +156,26 @@ sudo journalctl -u deenify-bot -f
 
 ```bash
 sudo cp deploy/nginx/deenify.conf /etc/nginx/sites-available/deenify
+sudo cp deploy/nginx/atmos-checkout-proxy.conf /etc/nginx/snippets/atmos-checkout-proxy.conf
 sudo ln -sf /etc/nginx/sites-available/deenify /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
+```
+
+### Atmos sandbox checkout (IP whitelist)
+
+Atmos test checkout (`dev-checkout.atmos.uz`) opens only from the **server IP** (e.g. `157.173.124.191`).
+Users must not open `dev-checkout.atmos.uz` directly — nginx proxies it on your API domain:
+
+| Atmos returns | User opens |
+|---------------|------------|
+| `https://dev-checkout.atmos.uz/invoice?id=TOKEN` | `https://api.frienfinity.uz/invoice?id=TOKEN` |
+
+After `certbot`, add the same `include /etc/nginx/snippets/atmos-checkout-proxy.conf;` inside the **`:443` SSL** `server { }` block (before `location /`).
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ---

@@ -153,7 +153,7 @@ class AtmosCheckoutRedirectView(APIView):
         if not order or not order.payment_url:
             return HttpResponseNotFound("Payment link not found.")
 
-        target = AtmosPaymentService._normalize_checkout_url(order.payment_url)
+        target = AtmosPaymentService.client_checkout_url(order.payment_url)
         return redirect(target)
 
 

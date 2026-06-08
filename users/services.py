@@ -258,6 +258,23 @@ class AtmosPaymentService:
         return normalized
 
     @staticmethod
+    def client_checkout_url(url: str) -> str:
+        """
+        Sandbox dev-checkout.atmos.uz is reachable only from whitelisted server IP.
+        Users open the same path on our domain; nginx proxies to Atmos.
+        """
+        normalized = AtmosPaymentService._normalize_checkout_url(url)
+        if not normalized or not settings.ATMOS_TEST_MODE:
+            return normalized
+        proxy_base = (settings.ATMOS_CHECKOUT_PROXY_BASE or "").strip().rstrip("/")
+        if not proxy_base:
+            return normalized
+        for host in ("dev-checkout.atmos.uz",):
+            normalized = normalized.replace(f"https://{host}", proxy_base)
+            normalized = normalized.replace(f"http://{host}", proxy_base)
+        return normalized
+
+    @staticmethod
     def _is_success_code(code) -> bool:
         if code in (None, ""):
             return True
@@ -516,11 +533,11 @@ def create_atmos_order(*, user, plan):
 
 
 def build_bot_payment_url(order):
-    """URL from POST /checkout/invoice/create response (docs.atmos.uz), used as-is."""
+    """Invoice URL from Atmos API, rewritten to our domain in sandbox (IP proxy)."""
     payment_url = (order.payment_url or "").strip()
     if not payment_url:
         return ""
-    return AtmosPaymentService._normalize_checkout_url(payment_url)
+    return AtmosPaymentService.client_checkout_url(payment_url)
 
 
 def extract_callback_value(payload, *keys):

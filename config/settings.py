@@ -220,6 +220,14 @@ _base_url_override = os.environ.get('ATMOS_BASE_URL', '').strip()
 ATMOS_BASE_URL = (_base_url_override or 'https://apigw.atmos.uz').rstrip('/')
 ATMOS_TEST_MODE = os.environ.get('ATMOS_TEST_MODE', 'False') == 'True'
 # Payment URL comes from POST /checkout/invoice/create (sandbox: dev-checkout.atmos.uz).
+# In test mode, dev-checkout is IP-whitelisted — rewrite host to our public API domain.
+_checkout_proxy_override = os.environ.get('ATMOS_CHECKOUT_PROXY_BASE', '').strip().rstrip('/')
+if _checkout_proxy_override:
+    ATMOS_CHECKOUT_PROXY_BASE = _checkout_proxy_override
+elif ATMOS_CALLBACK_URL and '/api/' in ATMOS_CALLBACK_URL:
+    ATMOS_CHECKOUT_PROXY_BASE = ATMOS_CALLBACK_URL.split('/api/', 1)[0].rstrip('/')
+else:
+    ATMOS_CHECKOUT_PROXY_BASE = ''
 ATMOS_SIGN_ALGORITHM = os.environ.get('ATMOS_SIGN_ALGORITHM', 'sha256')
 
 # Quiz (Telegram bot round-based flow)
