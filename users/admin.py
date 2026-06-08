@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.utils import timezone
 
 from .models import (
     AtmosOrder,
@@ -21,6 +22,8 @@ class TelegramUserAdmin(admin.ModelAdmin):
         "free_tests_taken",
         "is_blocked",
         "has_active_premium",
+        "premium_starts_at",
+        "premium_expires_at",
         "created_at",
     )
     list_filter = ("language", "is_blocked", "created_at")
@@ -39,9 +42,40 @@ class TelegramUserAdmin(admin.ModelAdmin):
         ("Vaqt", {"fields": ("created_at", "updated_at", "last_seen_at"), "classes": ("collapse",)}),
     )
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related("premium_subscriptions__plan")
+
     @admin.display(boolean=True, description="Premium")
     def has_active_premium(self, obj):
         return obj.has_active_premium()
+
+    @admin.display(description="Premium boshlandi")
+    def premium_starts_at(self, obj):
+        subscription = self._current_subscription(obj)
+        if not subscription:
+            return "—"
+        return timezone.localtime(subscription.starts_at).strftime("%d.%m.%Y %H:%M")
+
+    @admin.display(description="Premium tugaydi")
+    def premium_expires_at(self, obj):
+        subscription = self._current_subscription(obj)
+        if not subscription:
+            return "—"
+        if subscription.expires_at is None:
+            return "∞"
+        return timezone.localtime(subscription.expires_at).strftime("%d.%m.%Y %H:%M")
+
+    @staticmethod
+    def _current_subscription(obj):
+        now = timezone.now()
+        for subscription in obj.premium_subscriptions.all():
+            if (
+                subscription.is_active
+                and subscription.starts_at <= now
+                and (subscription.expires_at is None or subscription.expires_at > now)
+            ):
+                return subscription
+        return None
 
 
 @admin.register(SubscriptionPlan)
@@ -71,10 +105,11 @@ class SubscriptionPlanAdmin(admin.ModelAdmin):
 @admin.register(UserPremiumSubscription)
 class UserPremiumSubscriptionAdmin(admin.ModelAdmin):
     list_display = ("user", "plan", "starts_at", "expires_at", "is_active", "is_current")
-    list_filter = ("is_active", "plan", "starts_at")
+    list_filter = ("is_active", "plan", "starts_at", "expires_at")
     search_fields = ("user__telegram_id", "user__username", "plan__name")
     readonly_fields = ("created_at", "updated_at")
     autocomplete_fields = ("user", "plan", "source_order")
+    ordering = ("-starts_at",)
 
     @admin.display(boolean=True, description="Joriy")
     def is_current(self, obj):

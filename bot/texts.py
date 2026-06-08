@@ -38,6 +38,32 @@ TEXTS = {
         "help": "📞 Yordam",
         "settings": "⚙️ Sozlamalar",
         "settings_section": "⚙️ Sozlamalar bo'limi",
+        "settings_subscription_active": (
+            "📊 {plan}\n"
+            "✅ Premium faol\n"
+            "📅 Boshlandi: {starts}\n"
+            "📅 Tugaydi: {until}"
+        ),
+        "settings_subscription_free": "📊 Premium: yo'q\n🆓 Bepul savollar: {used}/{limit}",
+        "settings_subscription_free_exhausted": (
+            "📊 Premium: yo'q\n"
+            "🚫 Bepul limit tugadi ({used}/{limit})\n"
+            "💎 Davom etish uchun obuna kerak"
+        ),
+        "settings_subscription_expired": (
+            "📊 {plan}\n"
+            "⏰ Premium muddati tugagan\n"
+            "📅 Tugagan sana: {until}\n"
+            "🆓 Bepul savollar: {used}/{limit}"
+        ),
+        "settings_subscription_pending": (
+            "📊 Premium: kutilmoqda\n"
+            "💳 To'lov jarayonda\n"
+            "📦 Tarif: {plan}"
+        ),
+        "settings_subscription_blocked": "🚫 Akkount bloklangan.",
+        "settings_subscription_status": "📊 Obuna holati",
+        "settings_subscription_inactive": "📊 Premium: yo'q\n🆓 Bepul savollar: {used}/{limit}",
         "change_language": "🌐 Tilni o'zgartirish",
         "language_updated": "✅ Til muvaffaqiyatli o'zgartirildi.",
         "back": "⬅️ Orqaga",
@@ -58,6 +84,8 @@ TEXTS = {
         "help_message_prompt": "Bizga o'z xabaringizni jo'nating:",
         "help_message_empty": "❌ Xabar yozing.",
         "help_message_sent": "✅ Xabaringiz yuborildi.",
+        "help_message_failed": "❌ Xabar operatorga yetmadi. Telefon orqali bog'laning.",
+        "help_message_no_admins": "❌ Operator hozircha sozlanmagan.",
         "help_cancel": "Bekor qilish",
         "quiz_no_questions": "Hozircha savollar topilmadi.",
         "quiz_correct": "✅ To'g'ri!",
@@ -70,7 +98,7 @@ TEXTS = {
         "quiz_reset_hint": "✨ Test boshidan boshlandi.",
         "quiz_subscription_required": (
             "🔒 Bepul {free_limit} ta savoldan keyin davom etish uchun obuna kerak.\n"
-            "To'lov tez orada qo'shiladi."
+            "Holatni ko'rish uchun «⚙️ Sozlamalar» bo'limiga o'ting."
         ),
         "quiz_restart_hint": "✨ Test qayta boshlandi. Barcha savollar boshidan, tasodifiy tartibda.",
         "quiz_session_expired": (
@@ -94,6 +122,31 @@ TEXTS = {
         "help": "📞 Ёрдам",
         "settings": "⚙️ Созламалар",
         "settings_section": "⚙️ Созламалар бўлими",
+        "settings_subscription_active": (
+            "📊 {plan}\n"
+            "✅ Premium фaol\n"
+            "📅 Бoshlandi: {starts}\n"
+            "📅 Тugaydi: {until}"
+        ),
+        "settings_subscription_free": "📊 Premium: йўқ\n🆓 Бepul savollar: {used}/{limit}",
+        "settings_subscription_free_exhausted": (
+            "📊 Premium: йўқ\n"
+            "🚫 Бepul limit tugadi ({used}/{limit})\n"
+            "💎 Дavom etish uchun obuna kerak"
+        ),
+        "settings_subscription_expired": (
+            "📊 {plan}\n"
+            "⏰ Premium muddati tugagan\n"
+            "📅 Tugagan sana: {until}\n"
+            "🆓 Бepul savollar: {used}/{limit}"
+        ),
+        "settings_subscription_pending": (
+            "📊 Premium: kutilmoqda\n"
+            "💳 To'lov jarayonda\n"
+            "📦 Tarif: {plan}"
+        ),
+        "settings_subscription_blocked": "🚫 Аккаунт блокланган.",
+        "settings_subscription_status": "📊 Обuna holati",
         "change_language": "🌐 Тилни ўзгартириш",
         "language_updated": "✅ Тил муваффақиятли ўзгартирилди.",
         "back": "⬅️ Орқага",
@@ -114,6 +167,8 @@ TEXTS = {
         "help_message_prompt": "Бизга ўз хабарингизни жўнатинг:",
         "help_message_empty": "❌ Хабар ёзинг.",
         "help_message_sent": "✅ Хабарингиз юборилди.",
+        "help_message_failed": "❌ Хabar операторга yetmadi. Телефон орқали bog'laning.",
+        "help_message_no_admins": "❌ Оператор ҳозирча созланмаган.",
         "help_cancel": "Бекор қилиш",
         "quiz_no_questions": "Ҳозирча саволлар топилмади.",
         "quiz_correct": "✅ Тўғри!",
@@ -126,12 +181,12 @@ TEXTS = {
         "quiz_reset_hint": "✨ Тест бошидан бошланди.",
         "quiz_subscription_required": (
             "🔒 Бепул {free_limit} та саволдан кейин давом этиш учун обуна керак.\n"
-            "Тўлов тез орада қўшилади."
+            "Ҳолатни кўриш учун «⚙️ Созламалар» бўлимига ўтинг."
         ),
         "quiz_restart_hint": "✨ Тест қайта бошланди. Барча саволлар бошидан, тасодифий тартибда.",
         "quiz_session_expired": (
-            "⏳ Бу savol muddati tugadi (bot qayta ishga tushgan bo'lishi mumkin).\n"
-            "«Тест ечиш» tugmasini bosing."
+            "⏳ Бу savolning muddati tugadi (bot qayta ishga tushgan bo'lishi mumkin).\n"
+            "«Тест ечиш» tugmasini босинг."
         ),
         "blocked": "Аккаунт блокланган.",
         "not_found": "Маълумот топилмади. /start ни босинг.",
@@ -150,6 +205,32 @@ TEXTS = {
         "help": "📞 Помощь",
         "settings": "⚙️ Настройки",
         "settings_section": "⚙️ Раздел настроек",
+        "settings_subscription_active": (
+            "📊 {plan}\n"
+            "✅ Premium активен\n"
+            "📅 Начало: {starts}\n"
+            "📅 Окончание: {until}"
+        ),
+        "settings_subscription_free": "📊 Premium: нет\n🆓 Бесплатные вопросы: {used}/{limit}",
+        "settings_subscription_free_exhausted": (
+            "📊 Premium: нет\n"
+            "🚫 Бесплатный лимит исчерпан ({used}/{limit})\n"
+            "💎 Для продолжения нужна подписка"
+        ),
+        "settings_subscription_expired": (
+            "📊 {plan}\n"
+            "⏰ Срок Premium истёк\n"
+            "📅 Дата окончания: {until}\n"
+            "🆓 Бесплатные вопросы: {used}/{limit}"
+        ),
+        "settings_subscription_pending": (
+            "📊 Premium: ожидается\n"
+            "💳 Платёж в обработке\n"
+            "📦 Тариф: {plan}"
+        ),
+        "settings_subscription_blocked": "🚫 Аккаунт заблокирован.",
+        "settings_subscription_status": "📊 Статус подписки",
+        "settings_subscription_inactive": "📊 Premium: нет\n🆓 Бесплатные вопросы: {used}/{limit}",
         "change_language": "🌐 Сменить язык",
         "language_updated": "✅ Язык успешно изменён.",
         "back": "⬅️ Назад",
@@ -170,6 +251,8 @@ TEXTS = {
         "help_message_prompt": "Отправьте нам ваше сообщение:",
         "help_message_empty": "❌ Напишите сообщение.",
         "help_message_sent": "✅ Ваше сообщение отправлено.",
+        "help_message_failed": "❌ Сообщение не доставлено оператору. Позвоните по телефону.",
+        "help_message_no_admins": "❌ Оператор пока не настроен.",
         "help_cancel": "Отмена",
         "quiz_no_questions": "Вопросы пока не найдены.",
         "quiz_correct": "✅ Правильно!",
@@ -182,7 +265,7 @@ TEXTS = {
         "quiz_reset_hint": "✨ Тест начат с начала.",
         "quiz_subscription_required": (
             "🔒 После {free_limit} бесплатных вопросов нужна подписка.\n"
-            "Оплата скоро будет доступна."
+            "Статус смотрите в разделе «⚙️ Настройки»."
         ),
         "quiz_restart_hint": "✨ Тест начат заново. Все вопросы с начала, в случайном порядке.",
         "blocked": "Аккаунт заблокирован.",

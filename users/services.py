@@ -72,14 +72,86 @@ def upsert_telegram_user(
     return user
 
 
-def get_user_premium_until(user):
-    subscription = (
-        user.premium_subscriptions.filter(is_active=True)
-        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()))
+def get_active_premium_subscription(user):
+    now = timezone.now()
+    return (
+        user.premium_subscriptions.filter(is_active=True, starts_at__lte=now)
+        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+        .select_related("plan")
         .order_by("-expires_at")
         .first()
     )
+
+
+def get_user_premium_until(user):
+    subscription = get_active_premium_subscription(user)
     return subscription.expires_at if subscription else None
+
+
+def get_user_premium_starts_at(user):
+    subscription = get_active_premium_subscription(user)
+    return subscription.starts_at if subscription else None
+
+
+def get_user_subscription_snapshot(user):
+    free_limit = TelegramUser.FREE_TEST_LIMIT
+    free_used = user.free_tests_taken
+    base = {
+        "free_used": free_used,
+        "free_limit": free_limit,
+        "plan": "",
+        "starts_at": None,
+        "expires_at": None,
+        "pending_order_status": "",
+    }
+
+    if user.is_blocked:
+        return {**base, "status": "blocked"}
+
+    active = get_active_premium_subscription(user)
+    if active:
+        return {
+            **base,
+            "status": "active",
+            "plan": active.plan.name,
+            "starts_at": active.starts_at,
+            "expires_at": active.expires_at,
+        }
+
+    pending_order = (
+        user.atmos_orders.filter(
+            status__in=(AtmosOrder.Status.CREATED, AtmosOrder.Status.PENDING),
+        )
+        .select_related("plan")
+        .order_by("-created_at")
+        .first()
+    )
+    if pending_order:
+        return {
+            **base,
+            "status": "pending_payment",
+            "plan": pending_order.plan.name,
+            "pending_order_status": pending_order.status,
+        }
+
+    if free_used >= free_limit:
+        return {**base, "status": "free_exhausted"}
+
+    last_subscription = (
+        user.premium_subscriptions.select_related("plan")
+        .order_by("-expires_at", "-starts_at")
+        .first()
+    )
+    if last_subscription:
+        return {
+            **base,
+            "status": "expired",
+            "plan": last_subscription.plan.name,
+            "starts_at": last_subscription.starts_at,
+            "expires_at": last_subscription.expires_at,
+        }
+
+    return {**base, "status": "free"}
 
 
 def get_user_statistics(user):

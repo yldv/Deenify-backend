@@ -22,5 +22,5 @@ async def cmd_help(message: Message, state: FSMContext):
 
 
 @router.message(Command("settings"))
-async def cmd_settings(message: Message, state: FSMContext):
-    await open_settings(message, state)
+async def cmd_settings(message: Message, state: FSMContext, api_client):
+    await open_settings(message, state, api_client)

@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 async def _run_take_test(message: Message, state: FSMContext, api_client):
     language = await get_language(state)
+    await state.clear()
     await state.update_data(language=language)
     quiz = QuizMessenger(api_client)
     await quiz.load_next(
@@ -31,6 +32,7 @@ async def _run_take_test(message: Message, state: FSMContext, api_client):
 
 async def _run_restart_from_start(message: Message, state: FSMContext, api_client):
     language = await get_language(state)
+    await state.clear()
     await state.update_data(language=language)
     quiz = QuizMessenger(api_client)
     await quiz.restart_from_start(

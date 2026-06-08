@@ -44,6 +44,7 @@ def home_keyboard(language: str):
 def settings_keyboard(language: str):
     return ReplyKeyboardMarkup(
         keyboard=[
+            [KeyboardButton(text=get_text(language, "settings_subscription_status"))],
             [KeyboardButton(text=get_text(language, "change_language"))],
             [KeyboardButton(text=get_text(language, "back"))],
         ],

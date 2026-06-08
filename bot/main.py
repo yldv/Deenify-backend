@@ -28,16 +28,23 @@ async def main():
         base_url=config.backend_base_url,
         bot_api_secret=config.bot_api_secret,
     )
+    if config.admin_ids:
+        logger.info("Help messages will be sent to admin_ids=%s", config.admin_ids)
+    else:
+        logger.warning("ADMIN_IDS is empty; help messages will not reach operators")
     allowed_updates = dispatcher.resolve_used_update_types()
     if "poll_answer" not in allowed_updates:
         allowed_updates = sorted({*allowed_updates, "poll_answer"})
     logger.info("Bot polling update types: %s", allowed_updates)
-    await dispatcher.start_polling(
-        bot,
-        api_client=api_client,
-        bot_config=config,
-        allowed_updates=allowed_updates,
-    )
+    try:
+        await dispatcher.start_polling(
+            bot,
+            api_client=api_client,
+            bot_config=config,
+            allowed_updates=allowed_updates,
+        )
+    finally:
+        await api_client.close()
 
 
 if __name__ == "__main__":

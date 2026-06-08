@@ -7,11 +7,11 @@ from aiogram.types import CallbackQuery, Message
 
 from bot.api_client import ApiClientError, NotFoundError
 from bot.keyboards import home_keyboard, language_keyboard, phone_keyboard
+from bot.handlers.settings import show_settings_menu
 from bot.states import ChoosingLanguage, RegistrationState
 from bot.texts import (
     LANGUAGE_BUTTON_TEXTS,
     LANGUAGE_BUTTON_TO_CODE_UI,
-    all_button_texts,
     get_text,
     normalize_language,
 )
@@ -56,17 +56,6 @@ async def start_command(message: Message, state: FSMContext, api_client):
     )
 
 
-@router.message(F.text.in_(all_button_texts("change_language")))
-async def change_language_button(message: Message, state: FSMContext):
-    data = await state.get_data()
-    language = normalize_language(data.get("language", "uz"))
-    await state.set_state(ChoosingLanguage.language)
-    await message.answer(
-        get_text(language, "choose_language"),
-        reply_markup=language_keyboard(),
-    )
-
-
 @router.message(ChoosingLanguage.language, F.text.in_(LANGUAGE_BUTTON_TEXTS))
 async def language_selected(message: Message, state: FSMContext, api_client):
     language = normalize_language(LANGUAGE_BUTTON_TO_CODE_UI[message.text])
@@ -79,9 +68,14 @@ async def language_selected(message: Message, state: FSMContext, api_client):
             user = await api_client.change_language(telegram_id=telegram_id, language=language)
             language = normalize_language(user.get("language", language))
             await state.update_data(language=language)
-            await state.clear()
+            return_to = data.get("return_to")
+            await state.update_data(return_to=None)
             await message.answer(get_text(language, "language_updated"))
-            await show_home_menu(message, language)
+            if return_to == "settings":
+                await show_settings_menu(message, state, language, user)
+            else:
+                await state.clear()
+                await show_home_menu(message, language)
         else:
             await api_client.get_or_create_user(
                 telegram_id=telegram_id,

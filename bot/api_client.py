@@ -46,9 +46,14 @@ class NotFoundError(ApiClientError):
 class BackendApiClient:
     base_url: str
     bot_api_secret: str = ""
+    session: aiohttp.ClientSession | None = None
 
     def __post_init__(self):
         self.base_url = self.base_url.rstrip("/")
+
+    async def close(self):
+        if self.session and not self.session.closed:
+            await self.session.close()
 
     def _auth_headers(self, headers: dict | None = None) -> dict:
         merged = {"Accept": "application/json", **(headers or {})}
@@ -56,24 +61,30 @@ class BackendApiClient:
             merged[BOT_API_SECRET_HEADER] = self.bot_api_secret
         return merged
 
+    async def _get_session(self, headers: dict) -> aiohttp.ClientSession:
+        if self.session and not self.session.closed:
+            return self.session
+        return aiohttp.ClientSession(headers=headers)
+
     async def _request(self, method: str, path: str, **kwargs):
         url = f"{self.base_url}{path}"
         headers = self._auth_headers(kwargs.pop("headers", None))
+        session = await self._get_session(headers)
+        owns_session = session is not self.session
         try:
-            async with aiohttp.ClientSession(headers=headers) as session:
-                async with session.request(method, url, **kwargs) as response:
-                    response_text = await response.text()
-                    payload = self._parse_payload(response_text)
-                    if response.status in (200, 201):
-                        return payload
-                    self._log_failure(method, url, response.status, response_text)
-                    self._raise_for_status(
-                        response.status,
-                        payload,
-                        method=method,
-                        url=url,
-                        response_text=response_text,
-                    )
+            async with session.request(method, url, **kwargs) as response:
+                response_text = await response.text()
+                payload = self._parse_payload(response_text)
+                if response.status in (200, 201):
+                    return payload
+                self._log_failure(method, url, response.status, response_text)
+                self._raise_for_status(
+                    response.status,
+                    payload,
+                    method=method,
+                    url=url,
+                    response_text=response_text,
+                )
         except aiohttp.ClientError as exc:
             logger.exception(
                 "Backend request connection error: method=%s url=%s error=%s",
@@ -86,6 +97,9 @@ class BackendApiClient:
                 method=method,
                 url=url,
             ) from exc
+        finally:
+            if owns_session:
+                await session.close()
 
     def _parse_payload(self, response_text):
         if not response_text:

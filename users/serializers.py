@@ -1,7 +1,11 @@
 from rest_framework import serializers
 
 from .models import AtmosOrder, SubscriptionPlan, TelegramUser
-from .services import get_user_premium_until
+from .services import (
+    get_active_premium_subscription,
+    get_user_premium_until,
+    get_user_subscription_snapshot,
+)
 
 
 class TelegramUserUpsertSerializer(serializers.Serializer):
@@ -19,9 +23,13 @@ class TelegramUserLanguageSerializer(serializers.Serializer):
 class TelegramUserSerializer(serializers.ModelSerializer):
     free_tests_used = serializers.IntegerField(source="free_tests_taken", read_only=True)
     is_premium = serializers.SerializerMethodField()
+    premium_starts_at = serializers.SerializerMethodField()
     premium_until = serializers.SerializerMethodField()
+    premium_plan = serializers.SerializerMethodField()
     can_take_test = serializers.SerializerMethodField()
     is_registered = serializers.BooleanField(read_only=True)
+    is_blocked = serializers.BooleanField(read_only=True)
+    subscription = serializers.SerializerMethodField()
 
     class Meta:
         model = TelegramUser
@@ -35,19 +43,34 @@ class TelegramUserSerializer(serializers.ModelSerializer):
             "quiz_round",
             "free_tests_used",
             "is_premium",
+            "premium_starts_at",
             "premium_until",
+            "premium_plan",
             "can_take_test",
             "is_registered",
+            "is_blocked",
+            "subscription",
         )
 
     def get_is_premium(self, obj):
         return obj.has_active_premium()
 
+    def get_premium_starts_at(self, obj):
+        subscription = get_active_premium_subscription(obj)
+        return subscription.starts_at if subscription else None
+
     def get_premium_until(self, obj):
         return get_user_premium_until(obj)
 
+    def get_premium_plan(self, obj):
+        subscription = get_active_premium_subscription(obj)
+        return subscription.plan.name if subscription else ""
+
     def get_can_take_test(self, obj):
         return obj.can_take_test()
+
+    def get_subscription(self, obj):
+        return get_user_subscription_snapshot(obj)
 
 
 class SubscriptionPlanSerializer(serializers.ModelSerializer):

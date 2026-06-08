@@ -1,3 +1,5 @@
+import logging
+
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
@@ -10,6 +12,7 @@ from bot.states import HelpState
 from bot.texts import all_button_texts, get_text
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
 @router.message(F.text.in_(all_button_texts("help")))
@@ -73,6 +76,13 @@ async def help_message_received(
         )
         return
 
+    if not bot_config.admin_ids:
+        logger.warning("ADMIN_IDS is empty; help message from %s was not forwarded", message.from_user.id)
+        await message.answer(get_text(language, "help_message_no_admins"), reply_markup=help_keyboard(language))
+        await preserve_language(state)
+        await state.set_state(HelpState.menu)
+        return
+
     user = message.from_user
     admin_text = (
         f"📬 Help message\n"
@@ -80,18 +90,26 @@ async def help_message_received(
         f"ID: {user.id}\n\n"
         f"{text}"
     )
+    delivered = 0
     for admin_id in bot_config.admin_ids:
         try:
             await bot.send_message(admin_id, admin_text)
+            delivered += 1
         except Exception:
-            continue
+            logger.exception("Failed to send help message to admin_id=%s", admin_id)
 
     await preserve_language(state)
     await state.set_state(HelpState.menu)
-    await message.answer(
-        get_text(language, "help_message_sent"),
-        reply_markup=help_keyboard(language),
-    )
+    if delivered:
+        await message.answer(
+            get_text(language, "help_message_sent"),
+            reply_markup=help_keyboard(language),
+        )
+    else:
+        await message.answer(
+            get_text(language, "help_message_failed"),
+            reply_markup=help_keyboard(language),
+        )
 
 
 @router.message(HelpState.menu, F.text.in_(all_button_texts("back")))
