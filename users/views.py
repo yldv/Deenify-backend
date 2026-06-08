@@ -1,5 +1,7 @@
-from django.http import HttpResponseNotFound
+from django.conf import settings
+from django.http import HttpResponse, HttpResponseNotFound
 from django.shortcuts import redirect
+from django.utils.html import escape
 from django.utils import translation
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -153,6 +155,28 @@ class AtmosCheckoutRedirectView(APIView):
         if not order or not order.payment_url:
             return HttpResponseNotFound("Payment link not found.")
         target = AtmosPaymentService._normalize_checkout_url(order.payment_url)
+        # Sandbox is HTTP-only; auto-redirect from HTTPS breaks on iPhone (white screen).
+        if settings.ATMOS_TEST_MODE and target.startswith("http://"):
+            safe_url = escape(target)
+            html = f"""<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deenify — To'lov</title>
+  <style>
+    body {{ font-family: -apple-system, sans-serif; margin: 0; padding: 24px;
+           display: flex; min-height: 100vh; align-items: center; justify-content: center;
+           background: #f5f5f5; }}
+    a {{ display: block; background: #1a7f4b; color: #fff; text-decoration: none;
+         padding: 16px 24px; border-radius: 12px; font-size: 18px; text-align: center; }}
+  </style>
+</head>
+<body>
+  <a href="{safe_url}">💳 To'lov sahifasini ochish</a>
+</body>
+</html>"""
+            return HttpResponse(html, content_type="text/html; charset=utf-8")
         return redirect(target)
 
 
