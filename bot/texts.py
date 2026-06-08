@@ -101,6 +101,8 @@ TEXTS = {
             "Quyida tarifni tanlang va to'lovni amalga oshiring."
         ),
         "subscribe_prompt": "💳 Obuna tarifini tanlang:",
+        "subscribe_plan_button_monthly": "{name} — {price} UZS/oy",
+        "subscribe_plan_button_yearly": "{name} — {monthly_price} UZS/oy × {months}",
         "subscribe_plan_button": "{name} — {price} UZS",
         "subscribe_pay_link": "💳 To'lov qilish",
         "subscribe_payment_ready": "✅ To'lov uchun quyidagi tugmani bosing:",
@@ -190,6 +192,8 @@ TEXTS = {
             "Қуйида тарифни танланг ва тўловни амалга оширинг."
         ),
         "subscribe_prompt": "💳 Обuna tarifini tanlang:",
+        "subscribe_plan_button_monthly": "{name} — {price} UZS/oy",
+        "subscribe_plan_button_yearly": "{name} — {monthly_price} UZS/oy × {months}",
         "subscribe_plan_button": "{name} — {price} UZS",
         "subscribe_pay_link": "💳 To'lov qilish",
         "subscribe_payment_ready": "✅ To'lov uchun quyidagi tugmani bosing:",
@@ -280,6 +284,8 @@ TEXTS = {
             "Выберите тариф ниже и оплатите."
         ),
         "subscribe_prompt": "💳 Выберите тариф подписки:",
+        "subscribe_plan_button_monthly": "{name} — {price} UZS/мес",
+        "subscribe_plan_button_yearly": "{name} — {monthly_price} UZS/мес × {months}",
         "subscribe_plan_button": "{name} — {price} UZS",
         "subscribe_pay_link": "💳 Оплатить",
         "subscribe_payment_ready": "✅ Нажмите кнопку ниже для оплаты:",

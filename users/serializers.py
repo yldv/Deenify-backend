@@ -78,7 +78,7 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SubscriptionPlan
-        fields = ("id", "name", "duration_days", "price")
+        fields = ("id", "name", "duration_days", "price", "period", "duration")
 
     def get_duration_days(self, obj):
         delta = obj.get_duration_delta()

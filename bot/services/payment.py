@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal, ROUND_HALF_UP
 
 from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -11,15 +12,56 @@ logger = logging.getLogger(__name__)
 PLAN_CALLBACK_PREFIX = "pay_plan:"
 
 
+def normalize_payment_url(url: str) -> str:
+    if not url:
+        return url
+    normalized = str(url).strip()
+    normalized = normalized.replace("http://test-checkout.pays.uz", "https://checkout.pays.uz")
+    normalized = normalized.replace("https://test-checkout.pays.uz", "https://checkout.pays.uz")
+    normalized = normalized.replace("http://checkout.pays.uz", "https://checkout.pays.uz")
+    return normalized
+
+
+def format_uzs(amount) -> str:
+    value = int(Decimal(str(amount)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    return f"{value:,}".replace(",", " ")
+
+
+def plan_billing_months(plan: dict) -> int:
+    period = plan.get("period") or "month"
+    duration = int(plan.get("duration") or 1)
+    if period == "year":
+        return 12 * duration
+    if period == "month":
+        return max(duration, 1)
+    if period == "week":
+        return max(duration, 1)
+    if period == "day":
+        return 1
+    return 1
+
+
 def plan_button_label(language: str, plan: dict) -> str:
-    price = plan.get("price")
-    if isinstance(price, str):
-        price = price.rstrip("0").rstrip(".") if "." in price else price
+    name = plan.get("name", "Premium")
+    price = Decimal(str(plan.get("price") or 0))
+    months = plan_billing_months(plan)
+    period = plan.get("period") or "month"
+
+    if period == "year" or months >= 12:
+        monthly = (price / Decimal(months)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return get_text(
+            language,
+            "subscribe_plan_button_yearly",
+            name=name,
+            monthly_price=format_uzs(monthly),
+            months=months,
+        )
+
     return get_text(
         language,
-        "subscribe_plan_button",
-        name=plan.get("name", "Premium"),
-        price=price,
+        "subscribe_plan_button_monthly",
+        name=name,
+        price=format_uzs(price),
     )
 
 
@@ -34,7 +76,7 @@ def build_plan_choice_keyboard(language: str, plans: list[dict]) -> InlineKeyboa
 def build_payment_url_keyboard(language: str, payment_url: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=get_text(language, "subscribe_pay_link"), url=payment_url)],
+            [InlineKeyboardButton(text=get_text(language, "subscribe_pay_link"), url=normalize_payment_url(payment_url))],
         ]
     )
 
@@ -91,7 +133,7 @@ async def create_payment_link(
         await message.answer(error_text)
         return False
 
-    payment_url = order.get("payment_url")
+    payment_url = normalize_payment_url(order.get("payment_url") or "")
     if not payment_url:
         error_text = get_text(language, "subscribe_payment_failed")
         payment_error = order.get("payment_error")
