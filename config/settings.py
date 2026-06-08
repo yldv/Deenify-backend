@@ -216,7 +216,8 @@ ATMOS_API_KEY = os.environ.get('ATMOS_API_KEY', '').strip()
 ATMOS_CALLBACK_URL = os.environ.get('ATMOS_CALLBACK_URL', '').strip()
 ATMOS_RETURN_URL = os.environ.get('ATMOS_RETURN_URL', '').strip()
 # API gateway (NOT partner.atmos.uz — that is only the merchant portal).
-ATMOS_BASE_URL = os.environ.get('ATMOS_BASE_URL', 'https://apigw.atmos.uz').rstrip('/')
+_base_url_override = os.environ.get('ATMOS_BASE_URL', '').strip()
+ATMOS_BASE_URL = (_base_url_override or 'https://apigw.atmos.uz').rstrip('/')
 ATMOS_TEST_MODE = os.environ.get('ATMOS_TEST_MODE', 'False') == 'True'
 _default_checkout_url = (
     'https://test-checkout.pays.uz/invoice/get'
