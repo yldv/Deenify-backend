@@ -16,7 +16,8 @@ def normalize_payment_url(url: str) -> str:
     if not url:
         return url
     normalized = str(url).strip()
-    normalized = normalized.replace("http://checkout.pays.uz", "https://checkout.pays.uz")
+    for host in ("checkout.atmos.uz", "dev-checkout.atmos.uz", "checkout.pays.uz"):
+        normalized = normalized.replace(f"http://{host}", f"https://{host}")
     return normalized
 
 

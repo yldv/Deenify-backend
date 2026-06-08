@@ -5,8 +5,8 @@ import json
 import logging
 from decimal import Decimal
 from secrets import randbelow
+from uuid import uuid4
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
@@ -172,7 +172,6 @@ class AtmosPaymentService:
         self.consumer_secret = settings.ATMOS_CONSUMER_SECRET
         self.callback_url = settings.ATMOS_CALLBACK_URL
         self.return_url = settings.ATMOS_RETURN_URL
-        self.checkout_url = settings.ATMOS_CHECKOUT_URL.rstrip("/")
 
     def is_configured(self):
         return bool(
@@ -250,48 +249,37 @@ class AtmosPaymentService:
         if not url:
             return url
         normalized = str(url).strip()
-        normalized = normalized.replace("http://checkout.pays.uz", "https://checkout.pays.uz")
-        # Sandbox checkout has no TLS on :443 (docs: http://test-checkout.pays.uz).
-        # https://test-checkout... opens a blank page on mobile.
-        if settings.ATMOS_TEST_MODE:
-            normalized = normalized.replace("https://test-checkout.pays.uz", "http://test-checkout.pays.uz")
-        else:
-            normalized = normalized.replace("http://test-checkout.pays.uz", "https://test-checkout.pays.uz")
+        for host in (
+            "checkout.atmos.uz",
+            "dev-checkout.atmos.uz",
+            "checkout.pays.uz",
+        ):
+            normalized = normalized.replace(f"http://{host}", f"https://{host}")
         return normalized
 
-    def _default_checkout_base(self) -> str:
-        if settings.ATMOS_TEST_MODE:
-            return "http://test-checkout.pays.uz/invoice/get"
-        return "https://checkout.pays.uz/invoice/get"
-
-    def build_payment_url(self, transaction_id):
-        checkout_base = self.checkout_url or self._default_checkout_base()
-        checkout_base = self._normalize_checkout_url(checkout_base).rstrip("/")
-        query = {
-            "storeId": self.store_id,
-            "transactionId": transaction_id,
-        }
-        if self.return_url:
-            query["redirectLink"] = self.return_url
-        return self._normalize_checkout_url(f"{checkout_base}?{urlencode(query)}")
+    @staticmethod
+    def _is_success_code(code) -> bool:
+        if code in (None, ""):
+            return True
+        normalized = str(code).strip().upper()
+        return normalized in {"OK", "0", "SUCCESS"}
 
     @staticmethod
     def _extract_payment_transaction_id(raw: dict) -> str:
-        """Checkout/pre-apply use store_transaction.trans_id (see Atmos docs)."""
+        for key in ("payment_id", "transaction_id", "trans_id", "transactionId"):
+            value = raw.get(key)
+            if value not in (None, ""):
+                return str(value)
         store_transaction = raw.get("store_transaction") or {}
         for key in ("trans_id", "success_trans_id"):
             value = store_transaction.get(key)
-            if value not in (None, ""):
-                return str(value)
-        for key in ("transaction_id", "trans_id", "transactionId"):
-            value = raw.get(key)
             if value not in (None, ""):
                 return str(value)
         return ""
 
     @staticmethod
     def _extract_payment_url(raw: dict) -> str:
-        for key in ("paymentUrl", "payment_url", "pay_url"):
+        for key in ("url", "paymentUrl", "payment_url", "pay_url"):
             value = raw.get(key)
             if value:
                 return str(value)
@@ -299,9 +287,17 @@ class AtmosPaymentService:
 
     @staticmethod
     def _extract_api_error(raw: dict) -> str:
+        status = raw.get("status") or {}
+        code = status.get("code")
+        if code is not None and not AtmosPaymentService._is_success_code(code):
+            description = str(status.get("description") or status.get("message") or code)
+            locale = status.get("locale") or {}
+            if not description and locale:
+                description = str(locale.get("ru") or locale.get("uz") or locale.get("en") or code)
+            return f"{description} (code: {code})"
         result = raw.get("result") or {}
         code = result.get("code")
-        if code and str(code).upper() != "OK":
+        if code and not AtmosPaymentService._is_success_code(code):
             description = str(result.get("description") or result.get("message") or code)
             return f"{description} (code: {code})"
         if raw.get("error"):
@@ -311,6 +307,29 @@ class AtmosPaymentService:
         if raw.get("http_status"):
             return f"Atmos HTTP {raw['http_status']}"
         return ""
+
+    def _build_invoice_payload(self, order):
+        amount_tiyin = amount_to_tiyin(order.amount)
+        plan_name = "Deenify Premium"
+        if getattr(order, "plan", None):
+            plan_name = order.plan.name or plan_name
+        request_id = (order.merchant_order_id or order.order_id or uuid4().hex)[:64]
+        return {
+            "request_id": request_id,
+            "store_id": int(self._normalize_store_id(self.store_id)),
+            "account": order.merchant_order_id,
+            "amount": amount_tiyin,
+            "success_url": self.return_url or "https://t.me/DeenifyUzBot",
+            "payment_items": [
+                {
+                    "items_id": "1",
+                    "name": str(plan_name)[:255],
+                    "amount": amount_tiyin,
+                    "quantity": 1,
+                    "details": [{"name": "service", "values": "subscription"}],
+                }
+            ],
+        }
 
     @staticmethod
     def _normalize_store_id(store_id):
@@ -332,15 +351,7 @@ class AtmosPaymentService:
         return str(exc)
 
     def create_payment(self, order):
-        amount_tiyin = amount_to_tiyin(order.amount)
-        payload = {
-            "store_id": self._normalize_store_id(self.store_id),
-            "amount": amount_tiyin,
-            "account": order.merchant_order_id,
-            "lang": "uz",
-        }
-        if self.terminal_id:
-            payload["terminal_id"] = self.terminal_id
+        payload = self._build_invoice_payload(order)
 
         if not self.is_configured():
             missing = ", ".join(self.missing_config_fields())
@@ -360,14 +371,17 @@ class AtmosPaymentService:
         try:
             access_token, token_response = self.get_access_token()
             raw = self._request_json(
-                "/merchant/pay/create",
+                "/checkout/invoice/create",
                 payload=payload,
-                headers={"Authorization": f"Bearer {access_token}"},
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Accept": "application/json",
+                },
             )
         except (OSError, URLError, KeyError, ValueError) as exc:
             error_detail = self._format_request_error(exc)
             logger.exception(
-                "Atmos create payment failed for order=%s: %s",
+                "Atmos invoice create failed for order=%s: %s",
                 order.merchant_order_id,
                 error_detail,
             )
@@ -382,31 +396,26 @@ class AtmosPaymentService:
         api_error = self._extract_api_error(raw)
         transaction_id = self._extract_payment_transaction_id(raw)
         payment_url = self._normalize_checkout_url(self._extract_payment_url(raw))
-        if not payment_url and transaction_id:
-            payment_url = self.build_payment_url(transaction_id)
-        elif payment_url and settings.ATMOS_TEST_MODE and "checkout.pays.uz" in payment_url:
-            # Atmos sometimes returns production checkout for sandbox transactions.
-            payment_url = self.build_payment_url(transaction_id)
 
-        if api_error and not transaction_id:
+        if api_error and not payment_url:
             logger.error(
-                "Atmos create payment rejected order=%s error=%s raw=%s",
+                "Atmos invoice create rejected order=%s error=%s raw=%s",
                 order.merchant_order_id,
                 api_error,
                 raw,
             )
             return {
                 "payment_url": "",
-                "transaction_id": "",
+                "transaction_id": transaction_id,
                 "error": api_error,
                 "raw": {**raw, "token_response": token_response},
                 "request": payload,
             }
 
         if not payment_url:
-            error = api_error or "Atmos did not return transaction_id."
+            error = api_error or "Atmos did not return payment url."
             logger.error(
-                "Atmos create payment without URL order=%s error=%s raw=%s",
+                "Atmos invoice create without URL order=%s error=%s raw=%s",
                 order.merchant_order_id,
                 error,
                 raw,
@@ -472,28 +481,11 @@ def create_atmos_order(*, user, plan):
 
 
 def build_bot_payment_url(order):
-    """Link for Telegram pay button.
-
-    Sandbox checkout is HTTP-only; iOS blocks https→http redirects, so we serve
-    an HTTPS bridge page on our API that links to the real Atmos checkout URL.
-    Production uses HTTPS checkout directly.
-    """
+    """HTTPS payment page URL returned by Atmos checkout/invoice/create."""
     payment_url = (order.payment_url or "").strip()
     if not payment_url:
         return ""
-    target = AtmosPaymentService._normalize_checkout_url(payment_url)
-    if not settings.ATMOS_TEST_MODE:
-        return target
-    callback = settings.ATMOS_CALLBACK_URL.strip()
-    if not callback:
-        return target
-    from urllib.parse import urlparse
-
-    parsed = urlparse(callback)
-    if not parsed.scheme or not parsed.netloc:
-        return target
-    base = f"{parsed.scheme}://{parsed.netloc}"
-    return f"{base}/api/v1/payments/atmos/checkout/{order.order_id}/"
+    return AtmosPaymentService._normalize_checkout_url(payment_url)
 
 
 def extract_callback_value(payload, *keys):
