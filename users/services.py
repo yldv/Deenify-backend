@@ -175,19 +175,20 @@ class AtmosPaymentService:
 
     @staticmethod
     def _normalize_checkout_url(url: str) -> str:
-        """test-checkout.pays.uz is unreachable; sandbox uses checkout.pays.uz."""
         if not url:
             return url
         normalized = str(url).strip()
-        normalized = normalized.replace("http://test-checkout.pays.uz", "https://checkout.pays.uz")
-        normalized = normalized.replace("https://test-checkout.pays.uz", "https://checkout.pays.uz")
+        normalized = normalized.replace("http://test-checkout.pays.uz", "https://test-checkout.pays.uz")
         normalized = normalized.replace("http://checkout.pays.uz", "https://checkout.pays.uz")
         return normalized
 
+    def _default_checkout_base(self) -> str:
+        if settings.ATMOS_TEST_MODE:
+            return "https://test-checkout.pays.uz/invoice/get"
+        return "https://checkout.pays.uz/invoice/get"
+
     def build_payment_url(self, transaction_id):
-        checkout_base = self.checkout_url
-        if not checkout_base:
-            checkout_base = "https://checkout.pays.uz/invoice/get"
+        checkout_base = self.checkout_url or self._default_checkout_base()
         checkout_base = self._normalize_checkout_url(checkout_base).rstrip("/")
         query = {
             "storeId": self.store_id,
@@ -198,14 +199,15 @@ class AtmosPaymentService:
         return self._normalize_checkout_url(f"{checkout_base}?{urlencode(query)}")
 
     @staticmethod
-    def _extract_transaction_id(raw: dict) -> str:
-        for key in ("transaction_id", "trans_id", "transactionId"):
-            value = raw.get(key)
-            if value not in (None, ""):
-                return str(value)
+    def _extract_payment_transaction_id(raw: dict) -> str:
+        """Checkout/pre-apply use store_transaction.trans_id (see Atmos docs)."""
         store_transaction = raw.get("store_transaction") or {}
         for key in ("trans_id", "success_trans_id"):
             value = store_transaction.get(key)
+            if value not in (None, ""):
+                return str(value)
+        for key in ("transaction_id", "trans_id", "transactionId"):
+            value = raw.get(key)
             if value not in (None, ""):
                 return str(value)
         return ""
@@ -301,9 +303,12 @@ class AtmosPaymentService:
             }
 
         api_error = self._extract_api_error(raw)
-        transaction_id = self._extract_transaction_id(raw)
+        transaction_id = self._extract_payment_transaction_id(raw)
         payment_url = self._normalize_checkout_url(self._extract_payment_url(raw))
         if not payment_url and transaction_id:
+            payment_url = self.build_payment_url(transaction_id)
+        elif payment_url and settings.ATMOS_TEST_MODE and "checkout.pays.uz" in payment_url:
+            # Atmos sometimes returns production checkout for sandbox transactions.
             payment_url = self.build_payment_url(transaction_id)
 
         if api_error and not transaction_id:
