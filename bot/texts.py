@@ -142,12 +142,6 @@ TEXTS = {
             "To'lov tugmasini bosing — karta ma'lumotlarini sahifada kiritasiz.\n"
             "To'lovdan keyin obuna avtomatik faollashadi."
         ),
-        "subscribe_test_card_hint": (
-            "🧪 Test karta (sandbox):\n"
-            "Karta: {card}\n"
-            "Muddat: {expiry}\n"
-            "SMS kod: {otp}"
-        ),
         "subscribe_payment_failed": "❌ To'lov havolasi yaratilmadi.",
         "subscribe_no_plans": "❌ Hozircha obuna tariflari mavjud emas.",
         "quiz_restart_hint": "✨ Test qayta boshlandi. Barcha savollar boshidan, tasodifiy tartibda.",
@@ -274,12 +268,6 @@ TEXTS = {
             "📆 {months} ойлик обуна · {monthly_price} so'm/ой · -{discount}%\n\n"
             "Тўлов тугмасини босинг — карта маълумотларини саҳифада киритасиз.\n"
             "Тўловдан кейин обуна автоматик фаоллашади."
-        ),
-        "subscribe_test_card_hint": (
-            "🧪 Тест карта (sandbox):\n"
-            "Карта: {card}\n"
-            "Муддат: {expiry}\n"
-            "SMS код: {otp}"
         ),
         "subscribe_payment_failed": "❌ Тўлов ҳаволаси яратилмади.",
         "subscribe_no_plans": "❌ Ҳозирча обуна тарифлари мавжуд эмас.",
@@ -408,12 +396,6 @@ TEXTS = {
             "📆 Подписка на {months} мес. · {monthly_price} сум/мес · -{discount}%\n\n"
             "Нажмите кнопку оплаты — введите карту на странице.\n"
             "После оплаты подписка активируется автоматически."
-        ),
-        "subscribe_test_card_hint": (
-            "🧪 Тестовая карта (sandbox):\n"
-            "Карта: {card}\n"
-            "Срок: {expiry}\n"
-            "SMS-код: {otp}"
         ),
         "subscribe_payment_failed": "❌ Не удалось создать ссылку на оплату.",
         "subscribe_no_plans": "❌ Тарифы подписки пока недоступны.",

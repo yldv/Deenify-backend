@@ -12,10 +12,6 @@ logger = logging.getLogger(__name__)
 
 PLAN_CALLBACK_PREFIX = "pay_plan:"
 
-ATMOS_TEST_CARD = "9860 0901 0101 4364"
-ATMOS_TEST_EXPIRY = "02/28"
-ATMOS_TEST_OTP = "111111"
-
 
 def normalize_payment_url(url: str) -> str:
     if not url:
@@ -225,8 +221,6 @@ def build_payment_ready_text(language: str, plan: dict, plans: list[dict]) -> st
             total_price=total_price,
         )
 
-    if os.environ.get("ATMOS_TEST_MODE", "").strip().lower() in {"1", "true", "yes"}:
-        text = f"{text}\n\n{get_text(language, 'subscribe_test_card_hint', card=ATMOS_TEST_CARD, expiry=ATMOS_TEST_EXPIRY, otp=ATMOS_TEST_OTP)}"
     return text
 
 
