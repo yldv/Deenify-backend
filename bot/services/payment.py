@@ -159,15 +159,27 @@ def build_subscription_catalog_text(language: str, plans: list[dict]) -> str:
 
 
 def build_plan_choice_keyboard(language: str, plans: list[dict]) -> InlineKeyboardMarkup:
-    rows = [
-        [
-            InlineKeyboardButton(
-                text=plan_button_label(language, plan, plans),
-                callback_data=f"{PLAN_CALLBACK_PREFIX}{plan['id']}",
+    rows = []
+    for plan in sort_plans_for_display(plans):
+        payment_url = normalize_payment_url(plan.get("payment_start_url") or "")
+        if payment_url:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=plan_button_label(language, plan, plans),
+                        url=payment_url,
+                    )
+                ]
             )
-        ]
-        for plan in sort_plans_for_display(plans)
-    ]
+        else:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=plan_button_label(language, plan, plans),
+                        callback_data=f"{PLAN_CALLBACK_PREFIX}{plan['id']}",
+                    )
+                ]
+            )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

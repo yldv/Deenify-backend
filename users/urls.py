@@ -5,6 +5,7 @@ from .views import (
     AtmosCallbackView,
     AtmosCheckoutRedirectView,
     AtmosOrderCreateView,
+    AtmosPaymentStartView,
     BotUserDetailView,
     BotUserLanguageView,
     BotUserOrdersView,
@@ -49,6 +50,11 @@ urlpatterns = [
         "api/v1/payments/atmos/callback/",
         AtmosCallbackView.as_view(),
         name="atmos-callback",
+    ),
+    path(
+        "api/v1/payments/atmos/start/",
+        AtmosPaymentStartView.as_view(),
+        name="atmos-payment-start",
     ),
     path(
         "api/v1/payments/atmos/checkout/<str:order_id>/",

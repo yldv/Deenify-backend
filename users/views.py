@@ -1,4 +1,4 @@
-from django.http import HttpResponseNotFound
+from django.http import HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import redirect
 from django.utils import translation
 from drf_spectacular.types import OpenApiTypes
@@ -29,6 +29,7 @@ from .services import (
     get_user_statistics,
     process_atmos_callback,
     upsert_telegram_user,
+    verify_payment_start_signature,
 )
 
 
@@ -105,7 +106,12 @@ class SubscriptionPlanListView(BotProtectedAPIView):
         user = get_telegram_user(telegram_id) if telegram_id else None
         queryset = SubscriptionPlan.objects.filter(is_active=True).order_by("sort_order", "price")
         with translation.override(get_requested_language(request, user)):
-            data = SubscriptionPlanSerializer(queryset, many=True).data
+            serializer = SubscriptionPlanSerializer(
+                queryset,
+                many=True,
+                context={"telegram_id": telegram_id},
+            )
+            data = serializer.data
         return Response(data, status=status.HTTP_200_OK)
 
 
@@ -144,6 +150,47 @@ class AtmosOrderCreateView(BotProtectedAPIView):
     request=OpenApiTypes.OBJECT,
     responses={200: OpenApiTypes.OBJECT},
 )
+class AtmosPaymentStartView(APIView):
+    """One-tap plan button: create order and redirect straight to Atmos checkout."""
+
+    authentication_classes = ()
+    permission_classes = ()
+
+    def get(self, request):
+        try:
+            telegram_id = int(request.GET.get("telegram_id", ""))
+            plan_id = int(request.GET.get("plan_id", ""))
+            exp = int(request.GET.get("exp", ""))
+        except (TypeError, ValueError):
+            return HttpResponseForbidden("Invalid payment link.")
+
+        signature = (request.GET.get("sig") or "").strip()
+        if not verify_payment_start_signature(
+            telegram_id=telegram_id,
+            plan_id=plan_id,
+            exp=exp,
+            signature=signature,
+        ):
+            return HttpResponseForbidden("Invalid or expired payment link.")
+
+        user = get_telegram_user(telegram_id)
+        if not user:
+            return HttpResponseNotFound("User not found.")
+        if user.is_blocked:
+            return HttpResponseForbidden("User is blocked.")
+
+        plan = get_active_plan(plan_id)
+        if not plan:
+            return HttpResponseNotFound("Subscription plan not found.")
+
+        order = create_atmos_order(user=user, plan=plan)
+        if not order.payment_url:
+            return HttpResponseForbidden("Payment link could not be created.")
+
+        target = AtmosPaymentService.client_checkout_url(order.payment_url)
+        return redirect(target)
+
+
 class AtmosCheckoutRedirectView(APIView):
     authentication_classes = ()
     permission_classes = ()

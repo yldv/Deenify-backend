@@ -75,14 +75,31 @@ class TelegramUserSerializer(serializers.ModelSerializer):
 
 class SubscriptionPlanSerializer(serializers.ModelSerializer):
     duration_days = serializers.SerializerMethodField()
+    payment_start_url = serializers.SerializerMethodField()
 
     class Meta:
         model = SubscriptionPlan
-        fields = ("id", "name", "duration_days", "price", "period", "duration")
+        fields = (
+            "id",
+            "name",
+            "duration_days",
+            "price",
+            "period",
+            "duration",
+            "payment_start_url",
+        )
 
     def get_duration_days(self, obj):
         delta = obj.get_duration_delta()
         return None if delta is None else delta.days
+
+    def get_payment_start_url(self, obj):
+        telegram_id = self.context.get("telegram_id")
+        if not telegram_id:
+            return ""
+        from .services import build_payment_start_url
+
+        return build_payment_start_url(telegram_id=int(telegram_id), plan_id=obj.id)
 
 
 class AtmosOrderCreateSerializer(serializers.Serializer):

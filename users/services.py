@@ -3,11 +3,13 @@ import hashlib
 import hmac
 import json
 import logging
+import time
 from decimal import Decimal
 from secrets import randbelow
-from uuid import uuid4
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
@@ -530,6 +532,60 @@ def create_atmos_order(*, user, plan):
         )
     )
     return order
+
+
+PAYMENT_START_TOKEN_TTL = 3600
+
+
+def _public_api_base_url() -> str:
+    proxy_base = (settings.ATMOS_CHECKOUT_PROXY_BASE or "").strip().rstrip("/")
+    if proxy_base:
+        return proxy_base
+    callback = (settings.ATMOS_CALLBACK_URL or "").strip().rstrip("/")
+    if callback and "/api/" in callback:
+        return callback.split("/api/", 1)[0]
+    return ""
+
+
+def build_payment_start_signature(*, telegram_id: int, plan_id: int, exp: int) -> str:
+    secret = (settings.BOT_API_SECRET or "").strip()
+    if not secret:
+        return ""
+    payload = f"{telegram_id}:{plan_id}:{exp}"
+    return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+
+def verify_payment_start_signature(
+    *, telegram_id: int, plan_id: int, exp: int, signature: str
+) -> bool:
+    if not signature or exp < int(time.time()):
+        return False
+    expected = build_payment_start_signature(
+        telegram_id=telegram_id, plan_id=plan_id, exp=exp
+    )
+    if not expected:
+        return False
+    return hmac.compare_digest(expected, signature)
+
+
+def build_payment_start_url(*, telegram_id: int, plan_id: int) -> str:
+    base = _public_api_base_url()
+    secret = (settings.BOT_API_SECRET or "").strip()
+    if not base or not secret:
+        return ""
+    exp = int(time.time()) + PAYMENT_START_TOKEN_TTL
+    signature = build_payment_start_signature(
+        telegram_id=telegram_id, plan_id=plan_id, exp=exp
+    )
+    query = urlencode(
+        {
+            "telegram_id": telegram_id,
+            "plan_id": plan_id,
+            "exp": exp,
+            "sig": signature,
+        }
+    )
+    return f"{base}/api/v1/payments/atmos/start/?{query}"
 
 
 def build_bot_payment_url(order):
