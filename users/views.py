@@ -17,6 +17,7 @@ from .serializers import (
     AtmosOrderCreateSerializer,
     AtmosOrderSerializer,
     SubscriptionPlanSerializer,
+    TelegramUserBotActiveSerializer,
     TelegramUserLanguageSerializer,
     TelegramUserSerializer,
     TelegramUserUpsertSerializer,
@@ -28,6 +29,7 @@ from .services import (
     get_admin_statistics,
     get_user_statistics,
     process_atmos_callback,
+    set_telegram_user_bot_active,
     upsert_telegram_user,
     verify_payment_start_signature,
 )
@@ -74,6 +76,28 @@ class BotUserLanguageView(BotProtectedAPIView):
         serializer.is_valid(raise_exception=True)
         user.language = serializer.validated_data["language"]
         user.save(update_fields=("language", "updated_at"))
+        with translation.override(user.get_content_language()):
+            data = TelegramUserSerializer(user).data
+        return Response(data, status=status.HTTP_200_OK)
+
+
+@extend_schema(
+    tags=["bot-users"],
+    request=TelegramUserBotActiveSerializer,
+    responses={200: TelegramUserSerializer},
+)
+class BotUserBotActiveView(BotProtectedAPIView):
+    def patch(self, request, telegram_id):
+        user = get_telegram_user(telegram_id)
+        if not user:
+            return user_not_found_response()
+
+        serializer = TelegramUserBotActiveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = set_telegram_user_bot_active(
+            telegram_id=telegram_id,
+            bot_is_active=serializer.validated_data["bot_is_active"],
+        )
         with translation.override(user.get_content_language()):
             data = TelegramUserSerializer(user).data
         return Response(data, status=status.HTTP_200_OK)

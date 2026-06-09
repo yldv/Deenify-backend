@@ -33,9 +33,16 @@
         <div class="deenify-stat-card deenify-stat-card--users">
             <div class="deenify-stat-card__body">
                 <div class="deenify-stat-card__value">{{ dashboard_stats.total_users }}</div>
-                <p class="deenify-stat-card__label">Foydalanuvchilar</p>
+                <p class="deenify-stat-card__label">Foydalanuvchilar (jami)</p>
             </div>
             <div class="deenify-stat-card__icon"><i class="fas fa-users"></i></div>
+        </div>
+        <div class="deenify-stat-card deenify-stat-card--users">
+            <div class="deenify-stat-card__body">
+                <div class="deenify-stat-card__value">{{ dashboard_stats.active_bot_users }}</div>
+                <p class="deenify-stat-card__label">Faol (bot ishlaydi)</p>
+            </div>
+            <div class="deenify-stat-card__icon"><i class="fas fa-user-check"></i></div>
         </div>
         <div class="deenify-stat-card deenify-stat-card--premium">
             <div class="deenify-stat-card__body">
@@ -114,7 +121,8 @@
             <div class="card card-outline card-primary h-100 section-card">
                 <div class="card-header"><i class="fas fa-tools"></i> Tezkor amallar</div>
                 <div class="card-body">
-                    <p class="mb-2"><strong>Bloklangan:</strong> {{ dashboard_stats.blocked_users }}</p>
+                    <p class="mb-1"><strong>Botdan chiqgan:</strong> {{ dashboard_stats.inactive_bot_users }}</p>
+                    <p class="mb-2"><strong>Admin bloklangan:</strong> {{ dashboard_stats.blocked_users }}</p>
                     <p class="mb-3"><strong>Jami javoblar:</strong> {{ dashboard_stats.quiz_answers_total }}</p>
                     <a href="{% url 'admin:tests_test_import_json' %}" class="btn btn-primary btn-import-main btn-block">
                         <i class="fas fa-file-import"></i> JSON dan savollar yuklash

@@ -38,6 +38,12 @@ class TelegramUser(TimeStampedModel):
     )
     phone_number = models.CharField(_("phone number"), max_length=50, blank=True)
     is_blocked = models.BooleanField(_("is blocked"), default=False)
+    bot_is_active = models.BooleanField(
+        _("bot is active"),
+        default=True,
+        db_index=True,
+        help_text=_("False if the user blocked the bot or deleted the chat."),
+    )
     free_tests_taken = models.PositiveSmallIntegerField(_("free tests taken"), default=0)
     quiz_round = models.PositiveIntegerField(_("quiz round"), default=1)
     last_seen_at = models.DateTimeField(_("last seen at"), null=True, blank=True)
@@ -87,6 +93,15 @@ class TelegramUser(TimeStampedModel):
         if self.language in {self.Language.UZ, self.Language.UZ_CY, self.Language.RU}:
             return self.language
         return self.Language.UZ
+
+
+class ActiveTelegramUser(TelegramUser):
+    """Users who have not blocked the bot and can receive messages."""
+
+    class Meta:
+        proxy = True
+        verbose_name = _("Active Telegram user")
+        verbose_name_plural = _("Active Telegram users")
 
 
 class SubscriptionPlan(TimeStampedModel):

@@ -20,6 +20,10 @@ class TelegramUserLanguageSerializer(serializers.Serializer):
     language = serializers.ChoiceField(choices=TelegramUser.Language.choices)
 
 
+class TelegramUserBotActiveSerializer(serializers.Serializer):
+    bot_is_active = serializers.BooleanField()
+
+
 class TelegramUserSerializer(serializers.ModelSerializer):
     free_tests_used = serializers.IntegerField(source="free_tests_taken", read_only=True)
     is_premium = serializers.SerializerMethodField()
@@ -29,6 +33,7 @@ class TelegramUserSerializer(serializers.ModelSerializer):
     can_take_test = serializers.SerializerMethodField()
     is_registered = serializers.BooleanField(read_only=True)
     is_blocked = serializers.BooleanField(read_only=True)
+    bot_is_active = serializers.BooleanField(read_only=True)
     subscription = serializers.SerializerMethodField()
 
     class Meta:
@@ -49,6 +54,7 @@ class TelegramUserSerializer(serializers.ModelSerializer):
             "can_take_test",
             "is_registered",
             "is_blocked",
+            "bot_is_active",
             "subscription",
         )
 

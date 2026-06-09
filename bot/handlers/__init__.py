@@ -1,5 +1,6 @@
 from aiogram import Router
 
+from .chat_member import router as chat_member_router
 from .help import router as help_router
 from .menu import router as menu_router
 from .registration import router as registration_router
@@ -18,4 +19,5 @@ def setup_routers() -> Router:
     router.include_router(start_router)
     router.include_router(registration_router)
     router.include_router(help_router)
+    router.include_router(chat_member_router)
     return router

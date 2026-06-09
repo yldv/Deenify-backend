@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.utils import timezone
 
 from .models import (
+    ActiveTelegramUser,
     AtmosOrder,
     AtmosTransaction,
     SubscriptionPlan,
@@ -10,8 +11,7 @@ from .models import (
 )
 
 
-@admin.register(TelegramUser)
-class TelegramUserAdmin(admin.ModelAdmin):
+class TelegramUserAdminBase(admin.ModelAdmin):
     list_display = (
         "telegram_id",
         "username",
@@ -20,13 +20,15 @@ class TelegramUserAdmin(admin.ModelAdmin):
         "language",
         "quiz_round",
         "free_tests_taken",
+        "bot_is_active",
         "is_blocked",
         "has_active_premium",
         "premium_starts_at",
         "premium_expires_at",
+        "last_seen_at",
         "created_at",
     )
-    list_filter = ("language", "is_blocked", "created_at")
+    list_filter = ("language", "bot_is_active", "is_blocked", "created_at")
     search_fields = ("telegram_id", "username", "full_name", "first_name", "last_name", "phone_number")
     readonly_fields = ("created_at", "updated_at", "last_seen_at")
     fieldsets = (
@@ -37,7 +39,7 @@ class TelegramUserAdmin(admin.ModelAdmin):
         ("Aloqa", {"fields": ("phone_number",)}),
         (
             "Test va cheklovlar",
-            {"fields": ("quiz_round", "free_tests_taken", "is_blocked")},
+            {"fields": ("quiz_round", "free_tests_taken", "bot_is_active", "is_blocked")},
         ),
         ("Vaqt", {"fields": ("created_at", "updated_at", "last_seen_at"), "classes": ("collapse",)}),
     )
@@ -76,6 +78,25 @@ class TelegramUserAdmin(admin.ModelAdmin):
             ):
                 return subscription
         return None
+
+
+@admin.register(TelegramUser)
+class TelegramUserAdmin(TelegramUserAdminBase):
+    pass
+
+
+@admin.register(ActiveTelegramUser)
+class ActiveTelegramUserAdmin(TelegramUserAdminBase):
+    list_display = tuple(
+        field for field in TelegramUserAdminBase.list_display if field != "bot_is_active"
+    )
+    list_filter = ("language", "is_blocked", "created_at")
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(bot_is_active=True)
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(SubscriptionPlan)

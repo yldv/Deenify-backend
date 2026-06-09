@@ -6,6 +6,7 @@ from .views import (
     AtmosCheckoutRedirectView,
     AtmosOrderCreateView,
     AtmosPaymentStartView,
+    BotUserBotActiveView,
     BotUserDetailView,
     BotUserLanguageView,
     BotUserOrdersView,
@@ -25,6 +26,11 @@ urlpatterns = [
         "api/v1/bot/users/<int:telegram_id>/language/",
         BotUserLanguageView.as_view(),
         name="bot-user-language",
+    ),
+    path(
+        "api/v1/bot/users/<int:telegram_id>/bot-active/",
+        BotUserBotActiveView.as_view(),
+        name="bot-user-bot-active",
     ),
     path(
         "api/v1/bot/users/<int:telegram_id>/statistics/",

@@ -56,6 +56,7 @@ def upsert_telegram_user(
     }
     if phone_number:
         defaults["phone_number"] = phone_number
+    defaults["bot_is_active"] = True
 
     user, created = TelegramUser.objects.get_or_create(
         telegram_id=telegram_id,
@@ -71,6 +72,15 @@ def upsert_telegram_user(
                 update_fields.append(field)
         if update_fields:
             user.save(update_fields=update_fields + ["updated_at"])
+    return user
+
+
+def set_telegram_user_bot_active(*, telegram_id: int, bot_is_active: bool):
+    user = TelegramUser.objects.filter(telegram_id=telegram_id).first()
+    if not user or user.bot_is_active == bot_is_active:
+        return user
+    user.bot_is_active = bot_is_active
+    user.save(update_fields=("bot_is_active", "updated_at"))
     return user
 
 
@@ -752,6 +762,8 @@ def get_admin_statistics():
 
     return {
         "total_users": TelegramUser.objects.count(),
+        "active_bot_users": TelegramUser.objects.filter(bot_is_active=True).count(),
+        "inactive_bot_users": TelegramUser.objects.filter(bot_is_active=False).count(),
         "premium_users": TelegramUser.objects.filter(
             premium_subscriptions__is_active=True,
             premium_subscriptions__starts_at__lte=now,

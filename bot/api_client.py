@@ -181,6 +181,13 @@ class BackendApiClient:
             json={"language": language},
         )
 
+    async def set_bot_active(self, *, telegram_id, bot_is_active: bool):
+        return await self._request(
+            "PATCH",
+            f"/bot/users/{telegram_id}/bot-active/",
+            json={"bot_is_active": bot_is_active},
+        )
+
     async def get_quiz_next(self, *, telegram_id, language="uz"):
         return await self._request(
             "GET",

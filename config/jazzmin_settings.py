@@ -26,6 +26,7 @@ JAZZMIN_SETTINGS = {
         "auth.user": "fas fa-user-shield",
         "auth.Group": "fas fa-users",
         "users.TelegramUser": "fas fa-paper-plane",
+        "users.ActiveTelegramUser": "fas fa-user-check",
         "users.SubscriptionPlan": "fas fa-gem",
         "users.UserPremiumSubscription": "fas fa-star",
         "users.AtmosOrder": "fas fa-receipt",
