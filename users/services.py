@@ -362,8 +362,8 @@ class AtmosPaymentService:
             "account": order.merchant_order_id,
             "amount": amount_tiyin,
             "success_url": self.return_url or "https://t.me/DeenifyUzBot",
-            # Docs: expiration_time in minutes (optional).
-            "expiration_time": 60,
+            # Atmos docs say minutes; sandbox uses seconds (60 => ~1 min TTL).
+            "expiration_time": settings.ATMOS_INVOICE_EXPIRATION_SECONDS,
         }
         # Docs use "items"; sandbox API currently accepts "payment_items".
         if use_doc_items_field:

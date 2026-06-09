@@ -229,6 +229,10 @@ elif ATMOS_CALLBACK_URL and '/api/' in ATMOS_CALLBACK_URL:
 else:
     ATMOS_CHECKOUT_PROXY_BASE = ''
 ATMOS_SIGN_ALGORITHM = os.environ.get('ATMOS_SIGN_ALGORITHM', 'sha256')
+# Sandbox treats this as seconds (~60s with value 60). Default: 1 hour.
+ATMOS_INVOICE_EXPIRATION_SECONDS = int(
+    os.environ.get('ATMOS_INVOICE_EXPIRATION_SECONDS', '3600')
+)
 
 # Quiz (Telegram bot round-based flow)
 DEENIFY_QUIZ_DEFAULT_CATEGORY_SLUG = os.environ.get('DEENIFY_QUIZ_DEFAULT_CATEGORY_SLUG', 'islam')
