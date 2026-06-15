@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.http import HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import redirect
 from django.utils import translation
@@ -30,6 +31,7 @@ from .services import (
     get_user_statistics,
     process_atmos_callback,
     set_telegram_user_bot_active,
+    sync_atmos_order_payment,
     upsert_telegram_user,
     verify_payment_start_signature,
 )
@@ -234,13 +236,37 @@ class AtmosCallbackView(APIView):
 
     def post(self, request):
         result = process_atmos_callback(request.data)
-        response_status = result.get("status", 200)
-        if not result.get("ok"):
-            return Response(
-                {"success": False, "error": result.get("error")},
-                status=response_status,
-            )
-        return Response({"success": True}, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "status": result.get("atmos_status", 0),
+                "message": result.get("message", "Error"),
+            },
+            status=result.get("http_status", 200),
+        )
+
+
+class AtmosReturnView(APIView):
+    """Redirect after payment on test-checkout.pays.uz / checkout.pays.uz."""
+
+    authentication_classes = ()
+    permission_classes = ()
+
+    def get(self, request):
+        transaction_id = (
+            request.query_params.get("transactionId")
+            or request.query_params.get("transaction_id")
+        )
+        if transaction_id:
+            order = AtmosOrder.objects.filter(
+                atmos_transaction_id=str(transaction_id)
+            ).first()
+            if order:
+                sync_atmos_order_payment(order)
+
+        return_url = (
+            settings.ATMOS_SUCCESS_REDIRECT_URL or "https://t.me/DeenifyUzBot"
+        ).strip()
+        return redirect(return_url)
 
 
 @extend_schema(tags=["bot-users"], responses={200: AtmosOrderSerializer(many=True)})

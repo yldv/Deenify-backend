@@ -215,12 +215,22 @@ ATMOS_CONSUMER_SECRET = os.environ.get('ATMOS_CONSUMER_SECRET', '').strip()
 ATMOS_API_KEY = os.environ.get('ATMOS_API_KEY', '').strip()
 ATMOS_CALLBACK_URL = os.environ.get('ATMOS_CALLBACK_URL', '').strip()
 ATMOS_RETURN_URL = os.environ.get('ATMOS_RETURN_URL', '').strip()
+ATMOS_SUCCESS_REDIRECT_URL = os.environ.get(
+    'ATMOS_SUCCESS_REDIRECT_URL', 'https://t.me/DeenifyUzBot'
+).strip()
 # API gateway (NOT partner.atmos.uz — that is only the merchant portal).
 _base_url_override = os.environ.get('ATMOS_BASE_URL', '').strip()
 ATMOS_BASE_URL = (_base_url_override or 'https://apigw.atmos.uz').rstrip('/')
 ATMOS_TEST_MODE = os.environ.get('ATMOS_TEST_MODE', 'False') == 'True'
-# Payment URL comes from POST /checkout/invoice/create (sandbox: dev-checkout.atmos.uz).
-# In test mode, dev-checkout is IP-whitelisted — rewrite host to our public API domain.
+# Payment page after POST /merchant/pay/create (docs.atmos.uz — Payment page).
+_checkout_page_override = os.environ.get('ATMOS_CHECKOUT_PAGE_BASE', '').strip().rstrip('/')
+if _checkout_page_override:
+    ATMOS_CHECKOUT_PAGE_BASE = _checkout_page_override
+elif ATMOS_TEST_MODE:
+    ATMOS_CHECKOUT_PAGE_BASE = 'http://test-checkout.pays.uz'
+else:
+    ATMOS_CHECKOUT_PAGE_BASE = 'https://checkout.pays.uz'
+# Legacy: nginx proxy for old dev-checkout.atmos.uz flow (no longer used by default).
 _checkout_proxy_override = os.environ.get('ATMOS_CHECKOUT_PROXY_BASE', '').strip().rstrip('/')
 if _checkout_proxy_override:
     ATMOS_CHECKOUT_PROXY_BASE = _checkout_proxy_override

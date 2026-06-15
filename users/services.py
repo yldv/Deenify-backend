@@ -271,20 +271,8 @@ class AtmosPaymentService:
 
     @staticmethod
     def client_checkout_url(url: str) -> str:
-        """
-        Sandbox dev-checkout.atmos.uz is reachable only from whitelisted server IP.
-        Users open the same path on our domain; nginx proxies to Atmos.
-        """
-        normalized = AtmosPaymentService._normalize_checkout_url(url)
-        if not normalized or not settings.ATMOS_TEST_MODE:
-            return normalized
-        proxy_base = (settings.ATMOS_CHECKOUT_PROXY_BASE or "").strip().rstrip("/")
-        if not proxy_base:
-            return normalized
-        for host in ("dev-checkout.atmos.uz",):
-            normalized = normalized.replace(f"https://{host}", proxy_base)
-            normalized = normalized.replace(f"http://{host}", proxy_base)
-        return normalized
+        """Return payment URL as-is (merchant/pay uses test-checkout.pays.uz directly)."""
+        return AtmosPaymentService._normalize_checkout_url(url)
 
     @staticmethod
     def _is_success_code(code) -> bool:
@@ -338,69 +326,66 @@ class AtmosPaymentService:
         return ""
 
     @staticmethod
-    def _ofd_item_details():
-        """OFD detail keys from Atmos docs (checkout/invoice/create)."""
-        return [
-            {"name": "package_code", "values": "1"},
-            {"name": "mark_code", "values": "0"},
-            {"name": "tin", "values": "0"},
-            {"name": "discount", "values": "0"},
-            {"name": "quantity", "values": "1"},
-        ]
+    def _extract_checkout_transaction_id(raw: dict) -> str:
+        store_transaction = raw.get("store_transaction") or {}
+        for key in ("trans_id", "success_trans_id"):
+            value = store_transaction.get(key)
+            if value not in (None, ""):
+                return str(value)
+        return AtmosPaymentService._extract_payment_transaction_id(raw)
 
-    def _build_invoice_item(self, *, plan_name: str, amount_tiyin: int) -> dict:
-        return {
-            "items_id": "1",
-            "code": "premium",
-            "name": str(plan_name)[:255],
-            "amount": amount_tiyin,
-            "quantity": 1,
-            "details": self._ofd_item_details(),
+    def build_checkout_page_url(self, *, transaction_id: str, redirect_link: str = "") -> str:
+        base = settings.ATMOS_CHECKOUT_PAGE_BASE.rstrip("/")
+        params = {
+            "storeId": self._normalize_store_id(self.store_id),
+            "transactionId": str(transaction_id),
         }
+        redirect = (redirect_link or self.return_url or "").strip()
+        if redirect:
+            params["redirectLink"] = redirect
+        return f"{base}/invoice/get?{urlencode(params)}"
 
-    def _build_invoice_payload(self, order, *, use_doc_items_field: bool = False):
-        """Build body for POST /checkout/invoice/create (docs.atmos.uz #ac6a13b73b)."""
+    def _build_merchant_pay_payload(self, order) -> dict:
+        """Body for POST /merchant/pay/create (docs.atmos.uz)."""
         amount_tiyin = amount_to_tiyin(order.amount)
-        plan_name = "Deenify Premium"
-        if getattr(order, "plan", None):
-            plan_name = order.plan.name or plan_name
-        request_id = (order.merchant_order_id or order.order_id or uuid4().hex)[:64]
-        item = self._build_invoice_item(plan_name=plan_name, amount_tiyin=amount_tiyin)
         payload = {
-            "request_id": request_id,
-            "store_id": int(self._normalize_store_id(self.store_id)),
-            "account": order.merchant_order_id,
             "amount": amount_tiyin,
-            "success_url": self.return_url or "https://t.me/DeenifyUzBot",
-            # Atmos docs say minutes; sandbox uses seconds (60 => ~1 min TTL).
-            "expiration_time": settings.ATMOS_INVOICE_EXPIRATION_SECONDS,
+            "account": order.merchant_order_id,
+            "store_id": self._normalize_store_id(self.store_id),
+            "lang": "uz",
         }
-        # Docs use "items"; sandbox API currently accepts "payment_items".
-        if use_doc_items_field:
-            payload["items"] = [item]
-        else:
-            payload["payment_items"] = [item]
+        if self.terminal_id:
+            payload["terminal_id"] = str(self.terminal_id).strip()
         return payload
 
-    def _create_invoice(self, order, access_token):
+    def _create_merchant_transaction(self, order, access_token):
         headers = {
             "Authorization": f"Bearer {access_token}",
             "Accept": "application/json",
         }
-        for use_doc_items in (False, True):
-            payload = self._build_invoice_payload(order, use_doc_items_field=use_doc_items)
-            raw = self._request_json(
-                "/checkout/invoice/create",
-                payload=payload,
-                headers=headers,
-            )
-            api_error = self._extract_api_error(raw)
-            payment_url = self._extract_payment_url(raw)
-            if payment_url or not api_error:
-                return raw, payload
-            if str(api_error).find("-999998") == -1:
-                return raw, payload
+        payload = self._build_merchant_pay_payload(order)
+        raw = self._request_json(
+            "/merchant/pay/create",
+            payload=payload,
+            headers=headers,
+        )
         return raw, payload
+
+    def get_merchant_transaction(self, transaction_id: str) -> dict:
+        access_token, _ = self.get_access_token()
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/json",
+        }
+        payload = {
+            "store_id": int(self._normalize_store_id(self.store_id)),
+            "transaction_id": int(transaction_id),
+        }
+        return self._request_json(
+            "/merchant/pay/get",
+            payload=payload,
+            headers=headers,
+        )
 
     @staticmethod
     def _normalize_store_id(store_id):
@@ -422,7 +407,7 @@ class AtmosPaymentService:
         return str(exc)
 
     def create_payment(self, order):
-        payload = self._build_invoice_payload(order)
+        payload = self._build_merchant_pay_payload(order)
 
         if not self.is_configured():
             missing = ", ".join(self.missing_config_fields())
@@ -441,11 +426,11 @@ class AtmosPaymentService:
 
         try:
             access_token, token_response = self.get_access_token()
-            raw, payload = self._create_invoice(order, access_token)
+            raw, payload = self._create_merchant_transaction(order, access_token)
         except (OSError, URLError, KeyError, ValueError) as exc:
             error_detail = self._format_request_error(exc)
             logger.exception(
-                "Atmos invoice create failed for order=%s: %s",
+                "Atmos merchant/pay/create failed for order=%s: %s",
                 order.merchant_order_id,
                 error_detail,
             )
@@ -458,35 +443,41 @@ class AtmosPaymentService:
             }
 
         api_error = self._extract_api_error(raw)
-        transaction_id = self._extract_payment_transaction_id(raw)
-        payment_url = self._normalize_checkout_url(self._extract_payment_url(raw))
+        checkout_transaction_id = self._extract_checkout_transaction_id(raw)
+        redirect_link = (self.return_url or "").strip()
+        payment_url = ""
+        if checkout_transaction_id:
+            payment_url = self.build_checkout_page_url(
+                transaction_id=checkout_transaction_id,
+                redirect_link=redirect_link,
+            )
 
-        if api_error and not payment_url:
+        if api_error and not checkout_transaction_id:
             logger.error(
-                "Atmos invoice create rejected order=%s error=%s raw=%s",
+                "Atmos merchant/pay/create rejected order=%s error=%s raw=%s",
                 order.merchant_order_id,
                 api_error,
                 raw,
             )
             return {
                 "payment_url": "",
-                "transaction_id": transaction_id,
+                "transaction_id": checkout_transaction_id,
                 "error": api_error,
                 "raw": {**raw, "token_response": token_response},
                 "request": payload,
             }
 
         if not payment_url:
-            error = api_error or "Atmos did not return payment url."
+            error = api_error or "Atmos did not return transaction id for checkout."
             logger.error(
-                "Atmos invoice create without URL order=%s error=%s raw=%s",
+                "Atmos merchant/pay/create without checkout URL order=%s error=%s raw=%s",
                 order.merchant_order_id,
                 error,
                 raw,
             )
             return {
                 "payment_url": "",
-                "transaction_id": transaction_id,
+                "transaction_id": checkout_transaction_id,
                 "error": error,
                 "raw": {**raw, "token_response": token_response},
                 "request": payload,
@@ -494,7 +485,7 @@ class AtmosPaymentService:
 
         return {
             "payment_url": payment_url,
-            "transaction_id": transaction_id,
+            "transaction_id": checkout_transaction_id,
             "error": "",
             "raw": {**raw, "token_response": token_response},
             "request": payload,
@@ -649,8 +640,55 @@ def validate_atmos_callback_sign(payload):
     return hmac.compare_digest(str(expected_sign).lower(), calculated)
 
 
+def sync_atmos_order_payment(order) -> bool:
+    """Poll merchant/pay/get and activate subscription when Atmos confirms payment."""
+    if not order.atmos_transaction_id or order.status == AtmosOrder.Status.PAID:
+        return order.status == AtmosOrder.Status.PAID
+
+    service = AtmosPaymentService()
+    if not service.is_configured():
+        return False
+
+    try:
+        raw = service.get_merchant_transaction(order.atmos_transaction_id)
+    except (OSError, URLError, ValueError) as exc:
+        logger.warning(
+            "Atmos merchant/pay/get failed order=%s: %s",
+            order.merchant_order_id,
+            exc,
+        )
+        return False
+
+    store_transaction = raw.get("store_transaction") or {}
+    if not store_transaction.get("confirmed"):
+        return False
+
+    transaction_id = str(
+        store_transaction.get("success_trans_id")
+        or store_transaction.get("trans_id")
+        or order.atmos_transaction_id
+    )
+    AtmosTransaction.objects.update_or_create(
+        order=order,
+        transaction_id=transaction_id,
+        defaults={
+            "status": AtmosTransaction.Status.SUCCESS,
+            "amount": order.amount,
+            "currency": order.currency,
+            "provider_payload": raw,
+            "performed_at": timezone.now(),
+        },
+    )
+    order.mark_as_paid(atmos_transaction_id=transaction_id, payload=raw)
+    return True
+
+
 @transaction.atomic
 def process_atmos_callback(payload):
+    """
+    Atmos Callback API (docs.atmos.uz): validate invoice before payment.
+    Response must be {"status": 1, "message": "..."} to allow payment.
+    """
     merchant_order_id = extract_callback_value(
         payload,
         "invoice",
@@ -666,22 +704,29 @@ def process_atmos_callback(payload):
         "payment_id",
         "id",
     )
-    raw_status = str(
-        extract_callback_value(payload, "status", "state", "payment_status")
-    ).lower()
     raw_amount = extract_callback_value(payload, "amount", "total", "sum")
 
     if not validate_atmos_callback_sign(payload):
-        return {"ok": False, "error": "invalid_signature", "status": 400}
+        return {
+            "ok": False,
+            "atmos_status": 0,
+            "message": "Invalid signature",
+            "http_status": 200,
+        }
 
     order_query = None
     if merchant_order_id:
         order_query = Q(merchant_order_id=merchant_order_id) | Q(order_id=merchant_order_id)
     if transaction_id:
-        transaction_query = Q(atmos_transaction_id=transaction_id)
+        transaction_query = Q(atmos_transaction_id=str(transaction_id))
         order_query = transaction_query if order_query is None else order_query | transaction_query
     if not order_query:
-        return {"ok": False, "error": "order_not_found", "status": 404}
+        return {
+            "ok": False,
+            "atmos_status": 0,
+            "message": "Invoice not found",
+            "http_status": 200,
+        }
 
     order = (
         AtmosOrder.objects.select_for_update()
@@ -690,67 +735,59 @@ def process_atmos_callback(payload):
         .first()
     )
     if not order:
-        return {"ok": False, "error": "order_not_found", "status": 404}
+        return {
+            "ok": False,
+            "atmos_status": 0,
+            "message": "Invoice not found",
+            "http_status": 200,
+        }
 
     try:
         callback_amount_tiyin = int(Decimal(str(raw_amount))) if raw_amount != "" else amount_to_tiyin(order.amount)
     except Exception:
         callback_amount_tiyin = -1
     if callback_amount_tiyin != amount_to_tiyin(order.amount):
-        transaction_status = AtmosTransaction.Status.FAILED
-        order.status = AtmosOrder.Status.FAILED
-        order.response_payload = payload
-        order.save(update_fields=("status", "response_payload", "updated_at"))
-        AtmosTransaction.objects.update_or_create(
-            order=order,
-            transaction_id=transaction_id or f"invalid-amount-{timezone.now().timestamp()}",
-            defaults={
-                "status": transaction_status,
-                "amount": Decimal(callback_amount_tiyin) / Decimal("100"),
-                "currency": order.currency,
-                "provider_payload": payload,
-                "performed_at": timezone.now(),
-            },
-        )
-        return {"ok": False, "error": "invalid_amount", "status": 400}
+        return {
+            "ok": False,
+            "atmos_status": 0,
+            "message": "Invalid amount",
+            "http_status": 200,
+        }
 
-    success_statuses = {"paid", "success", "successful", "completed", "approved", "2"}
-    failed_statuses = {"failed", "error", "declined", "rejected", "-1"}
-    canceled_statuses = {"cancelled", "canceled", "cancel", "0"}
+    if order.status == AtmosOrder.Status.PAID:
+        return {
+            "ok": True,
+            "atmos_status": 1,
+            "message": "Successfully",
+            "http_status": 200,
+            "order": order,
+        }
 
-    if not raw_status or raw_status in success_statuses:
-        transaction_status = AtmosTransaction.Status.SUCCESS
-    elif raw_status in canceled_statuses:
-        transaction_status = AtmosTransaction.Status.CANCELED
-    elif raw_status in failed_statuses:
-        transaction_status = AtmosTransaction.Status.FAILED
-    else:
-        transaction_status = AtmosTransaction.Status.INITIATED
+    if order.status not in (AtmosOrder.Status.CREATED, AtmosOrder.Status.PENDING):
+        return {
+            "ok": False,
+            "atmos_status": 0,
+            "message": "Invoice not available",
+            "http_status": 200,
+        }
 
-    transaction_log, _ = AtmosTransaction.objects.update_or_create(
-        order=order,
-        transaction_id=transaction_id or f"callback-{timezone.now().timestamp()}",
-        defaults={
-            "status": transaction_status,
-            "amount": order.amount,
-            "currency": order.currency,
-            "provider_payload": payload,
-            "performed_at": timezone.now(),
-        },
-    )
+    update_fields = ["response_payload", "updated_at"]
+    order.response_payload = payload
+    if transaction_id and str(order.atmos_transaction_id) != str(transaction_id):
+        order.atmos_transaction_id = str(transaction_id)
+        update_fields.append("atmos_transaction_id")
+    if order.status == AtmosOrder.Status.CREATED:
+        order.status = AtmosOrder.Status.PENDING
+        update_fields.append("status")
+    order.save(update_fields=update_fields)
 
-    if transaction_status == AtmosTransaction.Status.SUCCESS:
-        transaction_log.mark_as_success(payload=payload)
-    elif transaction_status == AtmosTransaction.Status.CANCELED:
-        order.status = AtmosOrder.Status.CANCELED
-        order.response_payload = payload
-        order.save(update_fields=("status", "response_payload", "updated_at"))
-    elif transaction_status == AtmosTransaction.Status.FAILED:
-        order.status = AtmosOrder.Status.FAILED
-        order.response_payload = payload
-        order.save(update_fields=("status", "response_payload", "updated_at"))
-
-    return {"ok": True, "order": order, "transaction": transaction_log, "status": 200}
+    return {
+        "ok": True,
+        "atmos_status": 1,
+        "message": "Successfully",
+        "http_status": 200,
+        "order": order,
+    }
 
 
 def get_admin_statistics():

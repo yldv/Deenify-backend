@@ -163,19 +163,31 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### Atmos sandbox checkout (IP whitelist)
+### Atmos payments (merchant/pay + callback)
 
-Atmos test checkout (`dev-checkout.atmos.uz`) opens only from the **server IP** (e.g. `157.173.124.191`).
-Users must not open `dev-checkout.atmos.uz` directly — nginx proxies it on your API domain:
+Integration flow per [docs.atmos.uz](https://docs.atmos.uz/en/index.html):
 
-| Atmos returns | User opens |
-|---------------|------------|
-| `https://dev-checkout.atmos.uz/invoice?id=TOKEN` | `https://api.frienfinity.uz/invoice?id=TOKEN` |
+1. `POST https://apigw.atmos.uz/merchant/pay/create` — create transaction
+2. User pays on `http://test-checkout.pays.uz/invoice/get?...` (sandbox) or `https://checkout.pays.uz/...` (production)
+3. Atmos calls your **callback** before confirming payment
+4. After payment, user is redirected to **return** URL; backend polls `merchant/pay/get` and activates subscription
 
-After `certbot`, add the same `include /etc/nginx/snippets/atmos-checkout-proxy.conf;` inside the **`:443` SSL** `server { }` block (before `location /`).
+Register in **partner-test.atmos.uz** (then Atmos will issue `ATMOS_API_KEY`):
 
-```bash
-sudo nginx -t && sudo systemctl reload nginx
+| Setting | Value |
+|---------|--------|
+| Callback URL | `https://api.frienfinity.uz/api/v1/payments/atmos/callback/` |
+| Return URL (redirectLink) | `https://api.frienfinity.uz/api/v1/payments/atmos/return/` |
+
+`.env` example:
+
+```env
+ATMOS_TEST_MODE=True
+ATMOS_BASE_URL=https://apigw.atmos.uz
+ATMOS_CALLBACK_URL=https://api.frienfinity.uz/api/v1/payments/atmos/callback/
+ATMOS_RETURN_URL=https://api.frienfinity.uz/api/v1/payments/atmos/return/
+ATMOS_SUCCESS_REDIRECT_URL=https://t.me/DeenifyUzBot
+ATMOS_API_KEY=   # from Atmos after callback URL is registered
 ```
 
 ---
@@ -193,7 +205,11 @@ sudo certbot --nginx -d api.frienfinity.uz
 ```env
 BACKEND_BASE_URL=https://api.frienfinity.uz/api/v1
 ATMOS_CALLBACK_URL=https://api.frienfinity.uz/api/v1/payments/atmos/callback/
+ATMOS_RETURN_URL=https://api.frienfinity.uz/api/v1/payments/atmos/return/
+ATMOS_SUCCESS_REDIRECT_URL=https://t.me/DeenifyUzBot
 ```
+
+Зарегистрируйте callback URL в **partner-test.atmos.uz** и добавьте выданный `ATMOS_API_KEY` в `.env`.
 
 ```bash
 sudo systemctl restart deenify-web deenify-bot

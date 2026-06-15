@@ -1,5 +1,4 @@
 import logging
-import os
 from decimal import Decimal, ROUND_HALF_UP
 
 from aiogram import Bot
@@ -17,14 +16,8 @@ def normalize_payment_url(url: str) -> str:
     if not url:
         return url
     normalized = str(url).strip()
-    for host in ("checkout.atmos.uz", "dev-checkout.atmos.uz", "checkout.pays.uz"):
+    for host in ("checkout.atmos.uz", "checkout.pays.uz"):
         normalized = normalized.replace(f"http://{host}", f"https://{host}")
-    if "dev-checkout.atmos.uz" in normalized:
-        backend = os.environ.get("BACKEND_BASE_URL", "").strip().rstrip("/")
-        if backend and "/api/" in backend:
-            proxy_base = backend.split("/api/", 1)[0]
-            normalized = normalized.replace("https://dev-checkout.atmos.uz", proxy_base)
-            normalized = normalized.replace("http://dev-checkout.atmos.uz", proxy_base)
     return normalized
 
 
