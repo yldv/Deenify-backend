@@ -1,4 +1,5 @@
 import logging
+import os
 from decimal import Decimal, ROUND_HALF_UP
 
 from aiogram import Bot
@@ -16,8 +17,17 @@ def normalize_payment_url(url: str) -> str:
     if not url:
         return url
     normalized = str(url).strip()
-    for host in ("checkout.atmos.uz", "checkout.pays.uz"):
+    proxy_base = ""
+    backend = os.environ.get("BACKEND_BASE_URL", "").strip().rstrip("/")
+    if backend and "/api/" in backend:
+        proxy_base = backend.split("/api/", 1)[0]
+    for host in ("checkout.atmos.uz", "dev-checkout.atmos.uz", "checkout.pays.uz"):
         normalized = normalized.replace(f"http://{host}", f"https://{host}")
+    # Merchant sandbox uses test-checkout.pays.uz — do not proxy it via dev-checkout.
+    if proxy_base:
+        for host in ("dev-checkout.atmos.uz",):
+            normalized = normalized.replace(f"https://{host}", proxy_base)
+            normalized = normalized.replace(f"http://{host}", proxy_base)
     return normalized
 
 

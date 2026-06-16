@@ -227,9 +227,22 @@ _checkout_page_override = os.environ.get('ATMOS_CHECKOUT_PAGE_BASE', '').strip()
 if _checkout_page_override:
     ATMOS_CHECKOUT_PAGE_BASE = _checkout_page_override
 elif ATMOS_TEST_MODE:
-    ATMOS_CHECKOUT_PAGE_BASE = 'http://test-checkout.pays.uz'
+    # Direct test-checkout is HTTP and often unreachable outside UZ; use HTTPS proxy when set.
+    _proxy_for_checkout = (
+        os.environ.get('ATMOS_CHECKOUT_PROXY_BASE', '').strip().rstrip('/')
+        or (
+            ATMOS_CALLBACK_URL.split('/api/', 1)[0].rstrip('/')
+            if ATMOS_CALLBACK_URL and '/api/' in ATMOS_CALLBACK_URL
+            else ''
+        )
+    )
+    ATMOS_CHECKOUT_PAGE_BASE = _proxy_for_checkout or 'https://test-checkout.pays.uz'
 else:
     ATMOS_CHECKOUT_PAGE_BASE = 'https://checkout.pays.uz'
+# merchant = POST /merchant/pay/create + pays.uz page; invoice = /checkout/invoice/create (sandbox fallback).
+ATMOS_PAYMENT_FLOW = os.environ.get('ATMOS_PAYMENT_FLOW', '').strip().lower()
+if not ATMOS_PAYMENT_FLOW:
+    ATMOS_PAYMENT_FLOW = 'invoice' if ATMOS_TEST_MODE else 'merchant'
 # Legacy: nginx proxy for old dev-checkout.atmos.uz flow (no longer used by default).
 _checkout_proxy_override = os.environ.get('ATMOS_CHECKOUT_PROXY_BASE', '').strip().rstrip('/')
 if _checkout_proxy_override:
