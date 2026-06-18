@@ -3,14 +3,21 @@ from django.urls import path
 from .views import (
     AdminStatisticsView,
     AtmosCallbackView,
+    AtmosCardApplyView,
+    AtmosCardPreApplyView,
+    AtmosCardSetLanguageView,
     AtmosCheckoutRedirectView,
     AtmosOrderCreateView,
     AtmosPaymentStartView,
     AtmosReturnView,
     BotUserBotActiveView,
+    BotUserCancelSubscriptionView,
     BotUserDetailView,
+    BotUserFeedbackView,
     BotUserLanguageView,
+    BotUserOfferMessageView,
     BotUserOrdersView,
+    BotUserReferralView,
     BotUserStatisticsView,
     BotUserView,
     SubscriptionPlanListView,
@@ -34,9 +41,29 @@ urlpatterns = [
         name="bot-user-bot-active",
     ),
     path(
+        "api/v1/bot/users/<int:telegram_id>/offer-message/",
+        BotUserOfferMessageView.as_view(),
+        name="bot-user-offer-message",
+    ),
+    path(
         "api/v1/bot/users/<int:telegram_id>/statistics/",
         BotUserStatisticsView.as_view(),
         name="bot-user-statistics",
+    ),
+    path(
+        "api/v1/bot/users/<int:telegram_id>/referral/",
+        BotUserReferralView.as_view(),
+        name="bot-user-referral",
+    ),
+    path(
+        "api/v1/bot/users/<int:telegram_id>/cancel-subscription/",
+        BotUserCancelSubscriptionView.as_view(),
+        name="bot-user-cancel-subscription",
+    ),
+    path(
+        "api/v1/bot/users/<int:telegram_id>/feedback/",
+        BotUserFeedbackView.as_view(),
+        name="bot-user-feedback",
     ),
     path(
         "api/v1/bot/users/<int:telegram_id>/orders/",
@@ -67,6 +94,21 @@ urlpatterns = [
         "api/v1/payments/atmos/start/",
         AtmosPaymentStartView.as_view(),
         name="atmos-payment-start",
+    ),
+    path(
+        "api/v1/payments/atmos/card/pre-apply/",
+        AtmosCardPreApplyView.as_view(),
+        name="atmos-card-preapply",
+    ),
+    path(
+        "api/v1/payments/atmos/card/apply/",
+        AtmosCardApplyView.as_view(),
+        name="atmos-card-apply",
+    ),
+    path(
+        "api/v1/payments/atmos/card/set-language/",
+        AtmosCardSetLanguageView.as_view(),
+        name="atmos-card-set-language",
     ),
     path(
         "api/v1/payments/atmos/checkout/<str:order_id>/",

@@ -150,6 +150,41 @@ sudo systemctl status deenify-web deenify-bot
 sudo journalctl -u deenify-bot -f
 ```
 
+### Автосписания подписок (bind-card)
+
+Подписки продлеваются по токену привязанной карты. Atmos списывает по инициативе
+мерчанта, поэтому нужен ежедневный запуск команды `charge_due_subscriptions` через
+systemd timer:
+
+```bash
+sudo cp deploy/systemd/deenify-billing.service /etc/systemd/system/
+sudo cp deploy/systemd/deenify-billing.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now deenify-billing.timer
+sudo systemctl list-timers deenify-billing.timer   # проверить расписание
+```
+
+Проверка вручную (без списания — только список должников):
+
+```bash
+cd /var/www/deenify
+sudo -u deenify .venv/bin/python manage.py charge_due_subscriptions --dry-run
+```
+
+Связанные переменные `.env` (необязательные, есть значения по умолчанию):
+
+```env
+ATMOS_TOKEN_PAYMENT_OTP=111111          # OTP для apply при списании по токену (подтвердить у Atmos для прода)
+ATMOS_RENEW_LEAD_DAYS=1                  # за сколько дней до конца продлевать
+ATMOS_RENEW_FAIL_GRACE_DAYS=3           # сколько дней пытаться, прежде чем выключить авто-продление
+ATMOS_REFERRAL_BONUS_DAYS_MONTHLY=10    # бонус пригласившему за месячную подписку приглашённого
+ATMOS_REFERRAL_BONUS_DAYS_YEARLY=30     # бонус за годовую
+BOT_USERNAME=DeenifyUzBot               # для реферальных ссылок t.me/<username>?start=ref_<id>
+```
+
+> Если Atmos подтвердит, что списывает сам (push-модель), таймер можно не включать —
+> код первичной оплаты при привязке карты от этого не зависит.
+
 ---
 
 ## 9. Nginx

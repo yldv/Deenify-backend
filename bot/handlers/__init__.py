@@ -1,6 +1,9 @@
 from aiogram import Router
 
+from bot.middlewares import LanguageSyncMiddleware
+
 from .chat_member import router as chat_member_router
+from .feedback import router as feedback_router
 from .help import router as help_router
 from .menu import router as menu_router
 from .registration import router as registration_router
@@ -12,6 +15,10 @@ from .tests import router as tests_router
 
 def setup_routers() -> Router:
     router = Router()
+    language_sync = LanguageSyncMiddleware()
+    router.message.middleware(language_sync)
+    router.callback_query.middleware(language_sync)
+    router.include_router(feedback_router)
     router.include_router(subscription_router)
     router.include_router(tests_router)
     router.include_router(menu_router)

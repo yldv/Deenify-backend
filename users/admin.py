@@ -5,6 +5,8 @@ from .models import (
     ActiveTelegramUser,
     AtmosOrder,
     AtmosTransaction,
+    BoundCard,
+    Feedback,
     SubscriptionPlan,
     TelegramUser,
     UserPremiumSubscription,
@@ -125,16 +127,49 @@ class SubscriptionPlanAdmin(admin.ModelAdmin):
 
 @admin.register(UserPremiumSubscription)
 class UserPremiumSubscriptionAdmin(admin.ModelAdmin):
-    list_display = ("user", "plan", "starts_at", "expires_at", "is_active", "is_current")
-    list_filter = ("is_active", "plan", "starts_at", "expires_at")
+    list_display = (
+        "user",
+        "plan",
+        "source",
+        "auto_renew",
+        "starts_at",
+        "expires_at",
+        "is_active",
+        "is_current",
+    )
+    list_filter = ("is_active", "auto_renew", "source", "plan", "starts_at", "expires_at")
     search_fields = ("user__telegram_id", "user__username", "plan__name")
     readonly_fields = ("created_at", "updated_at")
-    autocomplete_fields = ("user", "plan", "source_order")
+    autocomplete_fields = ("user", "plan", "source_order", "bound_card")
     ordering = ("-starts_at",)
 
     @admin.display(boolean=True, description="Joriy")
     def is_current(self, obj):
         return obj.is_current
+
+
+@admin.register(BoundCard)
+class BoundCardAdmin(admin.ModelAdmin):
+    list_display = ("user", "masked_pan", "card_id", "expiry", "is_active", "created_at", "removed_at")
+    list_filter = ("is_active", "created_at")
+    search_fields = ("user__telegram_id", "user__username", "card_id", "masked_pan")
+    readonly_fields = ("created_at", "updated_at", "removed_at", "card_token")
+    autocomplete_fields = ("user",)
+    ordering = ("-created_at",)
+
+
+@admin.register(Feedback)
+class FeedbackAdmin(admin.ModelAdmin):
+    list_display = ("user", "context", "reason", "short_text", "created_at")
+    list_filter = ("context", "reason", "created_at")
+    search_fields = ("user__telegram_id", "user__username", "text")
+    readonly_fields = ("created_at", "updated_at")
+    autocomplete_fields = ("user",)
+    ordering = ("-created_at",)
+
+    @admin.display(description="Text")
+    def short_text(self, obj):
+        return (obj.text[:60] + "…") if len(obj.text or "") > 60 else (obj.text or "")
 
 
 class AtmosTransactionInline(admin.TabularInline):
@@ -161,9 +196,10 @@ class AtmosOrderAdmin(admin.ModelAdmin):
         "amount",
         "currency",
         "status",
+        "is_auto_renewal",
         "paid_at",
     )
-    list_filter = ("status", "currency", "created_at", "paid_at")
+    list_filter = ("status", "is_auto_renewal", "currency", "created_at", "paid_at")
     search_fields = (
         "order_id",
         "merchant_order_id",
@@ -179,7 +215,7 @@ class AtmosOrderAdmin(admin.ModelAdmin):
         "request_payload",
         "response_payload",
     )
-    autocomplete_fields = ("user", "plan")
+    autocomplete_fields = ("user", "plan", "bound_card")
     inlines = (AtmosTransactionInline,)
 
 

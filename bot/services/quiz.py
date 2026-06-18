@@ -56,7 +56,7 @@ class QuizMessenger:
             if isinstance(exc.payload, dict):
                 free_limit = exc.payload.get("progress", {}).get("free_limit", free_limit)
             await state.clear()
-            await bot.send_message(
+            prompt_message = await bot.send_message(
                 chat_id,
                 get_text(language, "quiz_subscription_required", free_limit=free_limit),
                 reply_markup=home_keyboard(language),
@@ -67,6 +67,7 @@ class QuizMessenger:
                 language=language,
                 api_client=self.api,
                 telegram_id=chat_id,
+                prompt_message_id=prompt_message.message_id,
             )
             return False
         if isinstance(exc, BlockedUserError):

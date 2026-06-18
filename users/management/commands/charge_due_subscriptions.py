@@ -1,0 +1,122 @@
+"""Recurring billing: charge bound cards for subscriptions that are about to expire.
+
+Atmos token charges are merchant-initiated (pull model), so this command should run
+on a daily schedule (systemd timer or cron). It renews each user's latest auto-renew
+subscription a few days before it expires, using the stored card token.
+
+Idempotency / no double-charge: after a successful renewal the just-charged
+subscription has ``auto_renew`` turned off, while the freshly created next period keeps
+``auto_renew=True``. Thus each user has at most one auto-renewing subscription at a time.
+"""
+
+from datetime import timedelta
+
+from django.conf import settings
+from django.core.management.base import BaseCommand
+from django.db.models import Q
+from django.utils import timezone
+
+from users.models import UserPremiumSubscription
+from users.services import charge_subscription
+
+
+class Command(BaseCommand):
+    help = "Charge bound cards to renew subscriptions that are about to expire."
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="List due subscriptions without charging.",
+        )
+        parser.add_argument(
+            "--lead-days",
+            type=int,
+            default=getattr(settings, "ATMOS_RENEW_LEAD_DAYS", 1),
+            help="Renew this many days before the subscription expires.",
+        )
+
+    def handle(self, *args, **options):
+        dry_run = options["dry_run"]
+        lead_days = options["lead_days"]
+        fail_grace = getattr(settings, "ATMOS_RENEW_FAIL_GRACE_DAYS", 3)
+        now = timezone.now()
+        threshold = now + timedelta(days=lead_days)
+
+        due = (
+            UserPremiumSubscription.objects.select_related("user", "plan", "bound_card")
+            .filter(
+                is_active=True,
+                auto_renew=True,
+                plan__isnull=False,
+                expires_at__isnull=False,
+                expires_at__lte=threshold,
+            )
+            .order_by("expires_at")
+        )
+
+        total = due.count()
+        self.stdout.write(f"Found {total} subscription(s) due for renewal (<= {threshold:%Y-%m-%d %H:%M}).")
+        charged = failed = skipped = 0
+
+        for subscription in due:
+            user = subscription.user
+            card = subscription.bound_card
+            label = f"user={user.telegram_id} sub={subscription.pk}"
+
+            if not card or not card.is_active or not card.card_token:
+                self.stdout.write(f"  SKIP {label}: no active bound card; disabling auto-renew.")
+                if not dry_run:
+                    subscription.auto_renew = False
+                    subscription.save(update_fields=("auto_renew", "updated_at"))
+                skipped += 1
+                continue
+
+            if dry_run:
+                self.stdout.write(f"  DUE  {label} plan={subscription.plan_id} expires={subscription.expires_at:%Y-%m-%d}")
+                continue
+
+            result = charge_subscription(
+                user=user,
+                plan=subscription.plan,
+                bound_card=card,
+                is_auto_renewal=True,
+            )
+            if result.get("ok"):
+                subscription.auto_renew = False
+                subscription.save(update_fields=("auto_renew", "updated_at"))
+                charged += 1
+                self.stdout.write(self.style.SUCCESS(f"  OK   {label}: renewed."))
+                continue
+
+            failed += 1
+            error = result.get("error") or "unknown error"
+            expired_for = now - subscription.expires_at
+            if expired_for > timedelta(days=fail_grace):
+                self.stdout.write(
+                    self.style.ERROR(f"  FAIL {label}: {error}; grace exceeded, disabling auto-renew.")
+                )
+                subscription.auto_renew = False
+                subscription.save(update_fields=("auto_renew", "updated_at"))
+                self._notify_failure(user)
+            else:
+                self.stdout.write(
+                    self.style.WARNING(f"  FAIL {label}: {error}; will retry next run.")
+                )
+
+        self.stdout.write(
+            f"Done. charged={charged} failed={failed} skipped={skipped} dry_run={dry_run}."
+        )
+
+    def _notify_failure(self, user):
+        try:
+            from bot.texts import get_text
+            from users.notifications import send_telegram_message
+
+            language = user.get_content_language()
+            send_telegram_message(
+                chat_id=user.telegram_id,
+                text=get_text(language, "subscription_renewal_failed"),
+            )
+        except Exception:  # noqa: BLE001
+            pass

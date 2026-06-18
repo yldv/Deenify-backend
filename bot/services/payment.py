@@ -6,6 +6,7 @@ from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from bot.api_client import ApiClientError
+from bot.keyboards import feedback_decline_button
 from bot.texts import get_text
 
 logger = logging.getLogger(__name__)
@@ -21,13 +22,8 @@ def normalize_payment_url(url: str) -> str:
     backend = os.environ.get("BACKEND_BASE_URL", "").strip().rstrip("/")
     if backend and "/api/" in backend:
         proxy_base = backend.split("/api/", 1)[0]
-    for host in ("checkout.atmos.uz", "dev-checkout.atmos.uz", "checkout.pays.uz"):
+    for host in ("checkout.atmos.uz", "dev-checkout.atmos.uz", "checkout.pays.uz", "test-checkout.pays.uz"):
         normalized = normalized.replace(f"http://{host}", f"https://{host}")
-    # Merchant sandbox uses test-checkout.pays.uz — do not proxy it via dev-checkout.
-    if proxy_base:
-        for host in ("dev-checkout.atmos.uz",):
-            normalized = normalized.replace(f"https://{host}", proxy_base)
-            normalized = normalized.replace(f"http://{host}", proxy_base)
     return normalized
 
 
@@ -102,6 +98,7 @@ def plan_button_label(language: str, plan: dict, plans: list[dict]) -> str:
             return get_text(
                 language,
                 "subscribe_plan_button_yearly_discount",
+                total_price=format_uzs(price),
                 monthly_price=format_uzs(monthly),
                 discount=discount,
             )
@@ -109,6 +106,7 @@ def plan_button_label(language: str, plan: dict, plans: list[dict]) -> str:
             language,
             "subscribe_plan_button_yearly",
             name=name,
+            total_price=format_uzs(price),
             monthly_price=format_uzs(monthly),
             months=months,
         )
@@ -183,6 +181,7 @@ def build_plan_choice_keyboard(language: str, plans: list[dict]) -> InlineKeyboa
                     )
                 ]
             )
+    rows.append([feedback_decline_button(language, "declined")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -246,6 +245,7 @@ async def send_subscription_offers(
     language: str,
     api_client,
     telegram_id: int,
+    prompt_message_id: int | None = None,
 ) -> bool:
     try:
         plans = await api_client.list_subscription_plans(telegram_id=telegram_id)
@@ -258,11 +258,22 @@ async def send_subscription_offers(
         await bot.send_message(chat_id, get_text(language, "subscribe_no_plans"))
         return False
 
-    await bot.send_message(
+    offer_message = await bot.send_message(
         chat_id,
         build_subscription_catalog_text(language, plans),
         reply_markup=build_plan_choice_keyboard(language, plans),
     )
+    try:
+        await api_client.set_offer_message(
+            telegram_id=telegram_id,
+            message_id=offer_message.message_id,
+            chat_id=chat_id,
+            prompt_message_id=prompt_message_id,
+        )
+    except ApiClientError:
+        logger.warning(
+            "Failed to store offer message id telegram_id=%s", telegram_id
+        )
     return True
 
 

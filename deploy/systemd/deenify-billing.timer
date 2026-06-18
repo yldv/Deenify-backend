@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Deenify recurring billing daily
+
+[Timer]
+# Daily at 03:30 server time; catch up if the machine was off.
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import AtmosOrder, SubscriptionPlan, TelegramUser
+from .models import AtmosOrder, Feedback, SubscriptionPlan, TelegramUser
 from .services import (
     get_active_premium_subscription,
     get_user_premium_until,
@@ -14,6 +14,17 @@ class TelegramUserUpsertSerializer(serializers.Serializer):
     username = serializers.CharField(required=False, allow_blank=True, max_length=255)
     language = serializers.ChoiceField(choices=TelegramUser.Language.choices, default="uz")
     phone_number = serializers.CharField(required=False, allow_blank=True, max_length=50)
+    referred_by = serializers.IntegerField(required=False, allow_null=True)
+
+
+class FeedbackCreateSerializer(serializers.Serializer):
+    context = serializers.ChoiceField(
+        choices=Feedback.Context.choices, default=Feedback.Context.DECLINED
+    )
+    reason = serializers.ChoiceField(
+        choices=Feedback.Reason.choices, required=False, allow_blank=True
+    )
+    text = serializers.CharField(required=False, allow_blank=True)
 
 
 class TelegramUserLanguageSerializer(serializers.Serializer):
@@ -22,6 +33,12 @@ class TelegramUserLanguageSerializer(serializers.Serializer):
 
 class TelegramUserBotActiveSerializer(serializers.Serializer):
     bot_is_active = serializers.BooleanField()
+
+
+class TelegramUserOfferMessageSerializer(serializers.Serializer):
+    message_id = serializers.IntegerField(allow_null=True, required=False)
+    chat_id = serializers.IntegerField(allow_null=True, required=False)
+    prompt_message_id = serializers.IntegerField(allow_null=True, required=False)
 
 
 class TelegramUserSerializer(serializers.ModelSerializer):
@@ -70,7 +87,9 @@ class TelegramUserSerializer(serializers.ModelSerializer):
 
     def get_premium_plan(self, obj):
         subscription = get_active_premium_subscription(obj)
-        return subscription.plan.name if subscription else ""
+        if not subscription:
+            return ""
+        return subscription.plan.name if subscription.plan else "Premium"
 
     def get_can_take_test(self, obj):
         return obj.can_take_test()

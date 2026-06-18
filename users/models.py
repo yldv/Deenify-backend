@@ -47,6 +47,38 @@ class TelegramUser(TimeStampedModel):
     free_tests_taken = models.PositiveSmallIntegerField(_("free tests taken"), default=0)
     quiz_round = models.PositiveIntegerField(_("quiz round"), default=1)
     last_seen_at = models.DateTimeField(_("last seen at"), null=True, blank=True)
+    offer_message_id = models.BigIntegerField(
+        _("offer message id"),
+        null=True,
+        blank=True,
+        help_text=_("Telegram message id of the last subscription catalog message."),
+    )
+    offer_chat_id = models.BigIntegerField(
+        _("offer chat id"),
+        null=True,
+        blank=True,
+        help_text=_("Chat where the last subscription catalog message was sent."),
+    )
+    offer_prompt_message_id = models.BigIntegerField(
+        _("offer prompt message id"),
+        null=True,
+        blank=True,
+        help_text=_("Telegram message id of the 'subscription required' lead-in message."),
+    )
+    referred_by = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        related_name="referrals",
+        null=True,
+        blank=True,
+        verbose_name=_("referred by"),
+        help_text=_("User who invited this user via a referral link."),
+    )
+    referral_rewarded = models.BooleanField(
+        _("referral rewarded"),
+        default=False,
+        help_text=_("Whether this user's first payment already rewarded the inviter."),
+    )
 
     class Meta:
         ordering = ("-created_at",)
@@ -104,6 +136,41 @@ class ActiveTelegramUser(TelegramUser):
         verbose_name_plural = _("Active Telegram users")
 
 
+class BoundCard(TimeStampedModel):
+    """Atmos card token (tokenized card) used for recurring subscription charges."""
+
+    user = models.ForeignKey(
+        TelegramUser,
+        on_delete=models.CASCADE,
+        related_name="bound_cards",
+        verbose_name=_("user"),
+    )
+    card_id = models.CharField(_("Atmos card id"), max_length=64, db_index=True)
+    card_token = models.CharField(_("card token"), max_length=255)
+    masked_pan = models.CharField(_("masked pan"), max_length=32, blank=True)
+    expiry = models.CharField(_("expiry"), max_length=8, blank=True)
+    card_holder = models.CharField(_("card holder"), max_length=255, blank=True)
+    phone = models.CharField(_("phone"), max_length=32, blank=True)
+    is_active = models.BooleanField(_("is active"), default=True, db_index=True)
+    removed_at = models.DateTimeField(_("removed at"), null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = _("Bound card")
+        verbose_name_plural = _("Bound cards")
+        indexes = [
+            models.Index(fields=("user", "is_active")),
+        ]
+
+    def __str__(self):
+        return f"{self.masked_pan or self.card_id} ({self.user})"
+
+    def mark_removed(self):
+        self.is_active = False
+        self.removed_at = timezone.now()
+        self.save(update_fields=("is_active", "removed_at", "updated_at"))
+
+
 class SubscriptionPlan(TimeStampedModel):
     class BillingPeriod(models.TextChoices):
         DAY = "day", _("Day")
@@ -147,6 +214,11 @@ class SubscriptionPlan(TimeStampedModel):
 
 
 class UserPremiumSubscription(TimeStampedModel):
+    class Source(models.TextChoices):
+        PAYMENT = "payment", _("Payment")
+        REFERRAL = "referral", _("Referral bonus")
+        MANUAL = "manual", _("Manual")
+
     user = models.ForeignKey(
         TelegramUser,
         on_delete=models.CASCADE,
@@ -158,10 +230,31 @@ class UserPremiumSubscription(TimeStampedModel):
         on_delete=models.PROTECT,
         related_name="premium_subscriptions",
         verbose_name=_("plan"),
+        null=True,
+        blank=True,
     )
     starts_at = models.DateTimeField(_("starts at"), default=timezone.now)
     expires_at = models.DateTimeField(_("expires at"), null=True, blank=True)
     is_active = models.BooleanField(_("is active"), default=True)
+    auto_renew = models.BooleanField(
+        _("auto renew"),
+        default=False,
+        help_text=_("Charge the bound card automatically when this period ends."),
+    )
+    bound_card = models.ForeignKey(
+        "BoundCard",
+        on_delete=models.SET_NULL,
+        related_name="subscriptions",
+        null=True,
+        blank=True,
+        verbose_name=_("bound card"),
+    )
+    source = models.CharField(
+        _("source"),
+        max_length=20,
+        choices=Source.choices,
+        default=Source.PAYMENT,
+    )
     source_order = models.OneToOneField(
         "AtmosOrder",
         on_delete=models.SET_NULL,
@@ -180,7 +273,8 @@ class UserPremiumSubscription(TimeStampedModel):
         ]
 
     def __str__(self):
-        return f"{self.user} - {self.plan}"
+        plan_name = self.plan.name if self.plan else self.get_source_display()
+        return f"{self.user} - {plan_name}"
 
     @property
     def is_current(self):
@@ -236,6 +330,20 @@ class AtmosOrder(TimeStampedModel):
     )
     paid_at = models.DateTimeField(_("paid at"), null=True, blank=True)
     expires_at = models.DateTimeField(_("expires at"), null=True, blank=True)
+    success_notified = models.BooleanField(_("success notified"), default=False)
+    is_auto_renewal = models.BooleanField(
+        _("is auto renewal"),
+        default=False,
+        help_text=_("Charge created automatically by the recurring billing scheduler."),
+    )
+    bound_card = models.ForeignKey(
+        "BoundCard",
+        on_delete=models.SET_NULL,
+        related_name="orders",
+        null=True,
+        blank=True,
+        verbose_name=_("bound card"),
+    )
     payment_url = models.URLField(_("payment url"), max_length=500, blank=True)
     request_payload = models.JSONField(_("request payload"), default=dict, blank=True)
     response_payload = models.JSONField(_("response payload"), default=dict, blank=True)
@@ -297,7 +405,7 @@ class AtmosOrder(TimeStampedModel):
                 .first()
             )
             starts_at = active_subscription.expires_at if active_subscription else now
-            duration_delta = order.plan.get_duration_delta()
+            duration_delta = order.plan.get_duration_delta() if order.plan else None
             expires_at = None if duration_delta is None else starts_at + duration_delta
 
             return UserPremiumSubscription.objects.create(
@@ -306,6 +414,9 @@ class AtmosOrder(TimeStampedModel):
                 starts_at=starts_at,
                 expires_at=expires_at,
                 is_active=True,
+                auto_renew=bool(order.bound_card_id),
+                bound_card=order.bound_card,
+                source=UserPremiumSubscription.Source.PAYMENT,
                 source_order=order,
             )
 
@@ -377,6 +488,50 @@ class AtmosTransaction(TimeStampedModel):
             atmos_transaction_id=self.transaction_id,
             payload=payload or self.provider_payload,
         )
+
+
+class Feedback(TimeStampedModel):
+    """User feedback collected when a user declines or cancels premium."""
+
+    class Reason(models.TextChoices):
+        EXPENSIVE = "expensive", _("Too expensive")
+        NOT_NOW = "not_now", _("Not needed now")
+        TRUST = "trust", _("Trust / security")
+        HARD_PAYMENT = "hard_payment", _("Payment was difficult")
+        OTHER = "other", _("Other")
+
+    class Context(models.TextChoices):
+        DECLINED = "declined", _("Declined the offer")
+        CANCELED = "canceled", _("Canceled subscription")
+
+    user = models.ForeignKey(
+        TelegramUser,
+        on_delete=models.CASCADE,
+        related_name="feedbacks",
+        verbose_name=_("user"),
+    )
+    context = models.CharField(
+        _("context"),
+        max_length=20,
+        choices=Context.choices,
+        default=Context.DECLINED,
+        db_index=True,
+    )
+    reason = models.CharField(
+        _("reason"),
+        max_length=20,
+        choices=Reason.choices,
+        blank=True,
+    )
+    text = models.TextField(_("text"), blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = _("Feedback")
+        verbose_name_plural = _("Feedback")
+
+    def __str__(self):
+        return f"{self.user} - {self.get_context_display()} - {self.reason or 'text'}"
 
 
 def get_atmos_config():

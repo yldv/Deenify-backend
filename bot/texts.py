@@ -116,9 +116,17 @@ TEXTS = {
         ),
         "subscribe_catalog_monthly": "📅 Oylik — {price} so'm/oy\n   Har oy alohida to'lov",
         "subscribe_catalog_footer": "👇 Tarifni tanlang:",
+        "payment_success_lifetime": "Abadiy",
+        "payment_success_notification": (
+            "🎉 To'lov muvaffaqiyatli o'tdi!\n\n"
+            "⭐ <b>{plan_name}</b> premium obuna faollashtirildi.\n"
+            "🗓 Amal qilish muddati: <b>{until}</b>\n\n"
+            "Endi barcha testlar va savollar siz uchun ochiq. "
+            "Bilimingizni oshirishda davom eting! 📚"
+        ),
         "subscribe_plan_button_monthly": "Oylik · {price} so'm/oy",
-        "subscribe_plan_button_yearly": "Yillik · {monthly_price} so'm/oy",
-        "subscribe_plan_button_yearly_discount": "Yillik · {monthly_price} so'm/oy · -{discount}%",
+        "subscribe_plan_button_yearly": "Yillik · {total_price} so'm",
+        "subscribe_plan_button_yearly_discount": "Yillik · {total_price} so'm · -{discount}%",
         "subscribe_plan_button": "{name} — {price} UZS",
         "subscribe_pay_link": "💳 {price} so'm to'lash",
         "subscribe_payment_ready_monthly": (
@@ -144,6 +152,42 @@ TEXTS = {
         ),
         "subscribe_payment_failed": "❌ To'lov havolasi yaratilmadi.",
         "subscribe_no_plans": "❌ Hozircha obuna tariflari mavjud emas.",
+        "settings_invite_friends": "👥 Do'stlarni taklif qilish",
+        "settings_cancel_subscription": "❌ Obunani bekor qilish",
+        "referral_panel": (
+            "👥 <b>Do'stlarni taklif qiling</b>\n\n"
+            "Quyidagi havolangizni ulashing. Do'stingiz ro'yxatdan o'tib, "
+            "birinchi obunani sotib olsa, sizga bonus premium kunlar beriladi:\n"
+            "• Oylik obuna uchun — <b>{monthly}</b> kun\n"
+            "• Yillik obuna uchun — <b>{yearly}</b> kun\n\n"
+            "🔗 {link}\n\n"
+            "📊 Taklif qilinganlar: <b>{invited}</b>\n"
+            "✅ Obuna bo'lganlar: <b>{paid}</b>"
+        ),
+        "referral_reward_notification": (
+            "🎁 Tabriklaymiz! {invited_name} sizning havolangiz orqali premium obuna oldi.\n"
+            "Sizga <b>{days}</b> kun bonus premium qo'shildi. Rahmat! 🙌"
+        ),
+        "cancel_no_subscription": "ℹ️ Sizda faol obuna yo'q.",
+        "cancel_done": (
+            "✅ Avto-uzaytirish o'chirildi va karta uzildi.\n"
+            "Premium <b>{until}</b> gacha amal qiladi."
+        ),
+        "cancel_done_no_premium": "✅ Avto-uzaytirish o'chirildi va karta uzildi.",
+        "feedback_decline_button": "❌ Premium kerak emas",
+        "feedback_intro": "Bizga yordam bering: nega obuna bo'lmadingiz?",
+        "feedback_reason_expensive": "💰 Narxi qimmat", 
+        "feedback_reason_not_now": "🕒 Hozir kerak emas",
+        "feedback_reason_trust": "🔒 Ishonch / xavfsizlik",
+        "feedback_reason_hard_payment": "💳 To'lov qiyin bo'ldi",
+        "feedback_reason_other": "✍️ Boshqa sabab",
+        "feedback_skip": "O'tkazib yuborish",
+        "feedback_other_prompt": "Iltimos, sababingizni yozib qoldiring:",
+        "feedback_thanks": "🙏 Fikringiz uchun rahmat!",
+        "subscription_renewal_failed": (
+            "⚠️ Obunani avtomatik uzaytirib bo'lmadi (kartadan to'lov o'tmadi).\n"
+            "Premiumni davom ettirish uchun qaytadan obuna bo'ling."
+        ),
         "quiz_restart_hint": "✨ Test qayta boshlandi. Barcha savollar boshidan, tasodifiy tartibda.",
         "quiz_session_expired": (
             "⏳ Bu savol muddati tugadi (bot qayta ishga tushgan bo'lishi mumkin).\n"
@@ -243,9 +287,17 @@ TEXTS = {
         ),
         "subscribe_catalog_monthly": "📅 Ойлик — {price} so'm/ой\n   Ҳар ой алоҳида тўлов",
         "subscribe_catalog_footer": "👇 Тарифни танланг:",
+        "payment_success_lifetime": "Абадий",
+        "payment_success_notification": (
+            "🎉 Тўлов муваффақиятли ўтди!\n\n"
+            "⭐ <b>{plan_name}</b> премиум обуна фаоллаштирилди.\n"
+            "🗓 Амал қилиш муддати: <b>{until}</b>\n\n"
+            "Энди барча тестлар ва саволлар сиз учун очиқ. "
+            "Билимингизни оширишда давом этинг! 📚"
+        ),
         "subscribe_plan_button_monthly": "Ойлик · {price} so'm/ой",
-        "subscribe_plan_button_yearly": "Йиллик · {monthly_price} so'm/ой",
-        "subscribe_plan_button_yearly_discount": "Йиллик · {monthly_price} so'm/ой · -{discount}%",
+        "subscribe_plan_button_yearly": "Йиллик · {total_price} so'm",
+        "subscribe_plan_button_yearly_discount": "Йиллик · {total_price} so'm · -{discount}%",
         "subscribe_plan_button": "{name} — {price} UZS",
         "subscribe_pay_link": "💳 {price} so'm тўлаш",
         "subscribe_payment_ready_monthly": (
@@ -271,6 +323,42 @@ TEXTS = {
         ),
         "subscribe_payment_failed": "❌ Тўлов ҳаволаси яратилмади.",
         "subscribe_no_plans": "❌ Ҳозирча обуна тарифлари мавжуд эмас.",
+        "settings_invite_friends": "👥 Дўстларни таклиф қилиш",
+        "settings_cancel_subscription": "❌ Обунани бекор қилиш",
+        "referral_panel": (
+            "👥 <b>Дўстларни таклиф қилинг</b>\n\n"
+            "Қуйидаги ҳаволангизни улашинг. Дўстингиз рўйхатдан ўтиб, "
+            "биринчи обунани сотиб олса, сизга бонус премиум кунлар берилади:\n"
+            "• Ойлик обуна учун — <b>{monthly}</b> кун\n"
+            "• Йиллик обуна учун — <b>{yearly}</b> кун\n\n"
+            "🔗 {link}\n\n"
+            "📊 Таклиф қилинганлар: <b>{invited}</b>\n"
+            "✅ Обуна бўлганлар: <b>{paid}</b>"
+        ),
+        "referral_reward_notification": (
+            "🎁 Табриклаймиз! {invited_name} сизнинг ҳаволангиз орқали премиум обуна олди.\n"
+            "Сизга <b>{days}</b> кун бонус премиум қўшилди. Раҳмат! 🙌"
+        ),
+        "cancel_no_subscription": "ℹ️ Сизда фаол обуна йўқ.",
+        "cancel_done": (
+            "✅ Авто-узайтириш ўчирилди ва карта узилди.\n"
+            "Премиум <b>{until}</b> гача амал қилади."
+        ),
+        "cancel_done_no_premium": "✅ Авто-узайтириш ўчирилди ва карта узилди.",
+        "feedback_decline_button": "❌ Премиум керак эмас",
+        "feedback_intro": "Бизга ёрдам беринг: нега обуна бўлмадингиз?",
+        "feedback_reason_expensive": "💰 Нархи қиммат",
+        "feedback_reason_not_now": "🕒 Ҳозир керак эмас",
+        "feedback_reason_trust": "🔒 Ишонч / хавфсизлик",
+        "feedback_reason_hard_payment": "💳 Тўлов қийин бўлди",
+        "feedback_reason_other": "✍️ Бошқа сабаб",
+        "feedback_skip": "Ўтказиб юбориш",
+        "feedback_other_prompt": "Илтимос, сабабингизни ёзиб қолдиринг:",
+        "feedback_thanks": "🙏 Фикрингиз учун раҳмат!",
+        "subscription_renewal_failed": (
+            "⚠️ Обунани автоматик узайтириб бўлмади (картадан тўлов ўтмади).\n"
+            "Премиумни давом эттириш учун қайтадан обуна бўлинг."
+        ),
         "quiz_restart_hint": "✨ Тест қайта бошланди. Барча саволлар бошидан, тасодифий тартибда.",
         "quiz_session_expired": (
             "⏳ Бу savolning muddati tugadi (bot qayta ishga tushgan bo'lishi mumkin).\n"
@@ -371,9 +459,17 @@ TEXTS = {
         ),
         "subscribe_catalog_monthly": "📅 Месячный — {price} сум/мес\n   Оплата каждый месяц",
         "subscribe_catalog_footer": "👇 Выберите тариф:",
+        "payment_success_lifetime": "Бессрочно",
+        "payment_success_notification": (
+            "🎉 Оплата прошла успешно!\n\n"
+            "⭐ Премиум-подписка <b>{plan_name}</b> активирована.\n"
+            "🗓 Действует до: <b>{until}</b>\n\n"
+            "Теперь все тесты и вопросы открыты для вас. "
+            "Продолжайте развиваться! 📚"
+        ),
         "subscribe_plan_button_monthly": "Месяц · {price} сум/мес",
-        "subscribe_plan_button_yearly": "Год · {monthly_price} сум/мес",
-        "subscribe_plan_button_yearly_discount": "Год · {monthly_price} сум/мес · -{discount}%",
+        "subscribe_plan_button_yearly": "Год · {total_price} сум",
+        "subscribe_plan_button_yearly_discount": "Год · {total_price} сум · -{discount}%",
         "subscribe_plan_button": "{name} — {price} UZS",
         "subscribe_pay_link": "💳 Оплатить {price} сум",
         "subscribe_payment_ready_monthly": (
@@ -399,6 +495,42 @@ TEXTS = {
         ),
         "subscribe_payment_failed": "❌ Не удалось создать ссылку на оплату.",
         "subscribe_no_plans": "❌ Тарифы подписки пока недоступны.",
+        "settings_invite_friends": "👥 Пригласить друзей",
+        "settings_cancel_subscription": "❌ Отменить подписку",
+        "referral_panel": (
+            "👥 <b>Пригласите друзей</b>\n\n"
+            "Поделитесь своей ссылкой. Когда друг зарегистрируется и оформит "
+            "первую подписку, вы получите бонусные дни премиума:\n"
+            "• За месячную подписку — <b>{monthly}</b> дн.\n"
+            "• За годовую подписку — <b>{yearly}</b> дн.\n\n"
+            "🔗 {link}\n\n"
+            "📊 Приглашено: <b>{invited}</b>\n"
+            "✅ Оформили подписку: <b>{paid}</b>"
+        ),
+        "referral_reward_notification": (
+            "🎁 Поздравляем! {invited_name} оформил премиум-подписку по вашей ссылке.\n"
+            "Вам добавлено <b>{days}</b> дн. бонусного премиума. Спасибо! 🙌"
+        ),
+        "cancel_no_subscription": "ℹ️ У вас нет активной подписки.",
+        "cancel_done": (
+            "✅ Автопродление отключено, карта отвязана.\n"
+            "Премиум действует до <b>{until}</b>."
+        ),
+        "cancel_done_no_premium": "✅ Автопродление отключено, карта отвязана.",
+        "feedback_decline_button": "❌ Премиум не нужен",
+        "feedback_intro": "Помогите нам: почему вы не оформили подписку?",
+        "feedback_reason_expensive": "💰 Дорого",
+        "feedback_reason_not_now": "🕒 Сейчас не нужно",
+        "feedback_reason_trust": "🔒 Доверие / безопасность",
+        "feedback_reason_hard_payment": "💳 Сложно оплатить",
+        "feedback_reason_other": "✍️ Другая причина",
+        "feedback_skip": "Пропустить",
+        "feedback_other_prompt": "Пожалуйста, напишите вашу причину:",
+        "feedback_thanks": "🙏 Спасибо за ваш отзыв!",
+        "subscription_renewal_failed": (
+            "⚠️ Не удалось автоматически продлить подписку (оплата картой не прошла).\n"
+            "Чтобы продолжить премиум, оформите подписку заново."
+        ),
         "quiz_restart_hint": "✨ Тест начат заново. Все вопросы с начала, в случайном порядке.",
         "blocked": "Аккаунт заблокирован.",
         "not_found": "Данные не найдены. Нажмите /start.",

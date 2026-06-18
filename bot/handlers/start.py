@@ -1,7 +1,7 @@
 import logging
 
 from aiogram import F, Router
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
@@ -21,8 +21,28 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 
+def _parse_referrer_id(command: CommandObject | None, telegram_id: int):
+    """Extract the inviter id from a /start ref_<id> deep link (never self)."""
+    if not command or not command.args:
+        return None
+    args = command.args.strip()
+    if not args.startswith("ref_"):
+        return None
+    raw = args[len("ref_"):]
+    if not raw.isdigit():
+        return None
+    referrer_id = int(raw)
+    return referrer_id if referrer_id != telegram_id else None
+
+
 @router.message(CommandStart())
-async def start_command(message: Message, state: FSMContext, api_client):
+async def start_command(
+    message: Message,
+    state: FSMContext,
+    api_client,
+    command: CommandObject | None = None,
+):
+    referrer_id = _parse_referrer_id(command, message.from_user.id)
     try:
         user = await api_client.get_user(telegram_id=message.from_user.id)
     except NotFoundError:
@@ -39,6 +59,8 @@ async def start_command(message: Message, state: FSMContext, api_client):
         return
 
     await state.set_state(ChoosingLanguage.language)
+    if referrer_id:
+        await state.update_data(referrer_id=referrer_id)
     await message.answer(
         get_text("uz", "choose_language"),
         reply_markup=language_keyboard(),
@@ -71,8 +93,9 @@ async def language_selected(message: Message, state: FSMContext, api_client):
                 full_name=user_full_name(message),
                 username=message.from_user.username or "",
                 language=language,
+                referred_by=data.get("referrer_id"),
             )
-            await state.update_data(language=language)
+            await state.update_data(language=language, referrer_id=None)
             await state.set_state(RegistrationState.waiting_for_phone)
             await message.answer(
                 get_text(language, "phone_prompt"),

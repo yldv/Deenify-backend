@@ -20,3 +20,7 @@ class HelpState(StatesGroup):
 
 class TakingTest(StatesGroup):
     answering = State()
+
+
+class FeedbackState(StatesGroup):
+    waiting_for_text = State()

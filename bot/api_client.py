@@ -161,18 +161,18 @@ class BackendApiClient:
         username="",
         language="uz",
         phone_number="",
+        referred_by=None,
     ):
-        return await self._request(
-            "POST",
-            "/bot/users/",
-            json={
-                "telegram_id": telegram_id,
-                "full_name": full_name,
-                "username": username or "",
-                "language": language,
-                "phone_number": phone_number,
-            },
-        )
+        payload = {
+            "telegram_id": telegram_id,
+            "full_name": full_name,
+            "username": username or "",
+            "language": language,
+            "phone_number": phone_number,
+        }
+        if referred_by:
+            payload["referred_by"] = referred_by
+        return await self._request("POST", "/bot/users/", json=payload)
 
     async def change_language(self, *, telegram_id, language):
         return await self._request(
@@ -186,6 +186,34 @@ class BackendApiClient:
             "PATCH",
             f"/bot/users/{telegram_id}/bot-active/",
             json={"bot_is_active": bot_is_active},
+        )
+
+    async def set_offer_message(
+        self, *, telegram_id, message_id, chat_id, prompt_message_id=None
+    ):
+        return await self._request(
+            "PATCH",
+            f"/bot/users/{telegram_id}/offer-message/",
+            json={
+                "message_id": message_id,
+                "chat_id": chat_id,
+                "prompt_message_id": prompt_message_id,
+            },
+        )
+
+    async def get_referral(self, *, telegram_id):
+        return await self._request("GET", f"/bot/users/{telegram_id}/referral/")
+
+    async def cancel_subscription(self, *, telegram_id):
+        return await self._request(
+            "POST", f"/bot/users/{telegram_id}/cancel-subscription/", json={}
+        )
+
+    async def send_feedback(self, *, telegram_id, context, reason="", text=""):
+        return await self._request(
+            "POST",
+            f"/bot/users/{telegram_id}/feedback/",
+            json={"context": context, "reason": reason, "text": text},
         )
 
     async def get_quiz_next(self, *, telegram_id, language="uz"):

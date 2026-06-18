@@ -22,7 +22,14 @@ from core.constants import SUPPORTED_LANGUAGES
 from tests.models import UserAnsweredTest
 from tests.quiz_services import get_quiz_progress
 
-from .models import AtmosOrder, AtmosTransaction, SubscriptionPlan, TelegramUser
+from .models import (
+    AtmosOrder,
+    AtmosTransaction,
+    BoundCard,
+    SubscriptionPlan,
+    TelegramUser,
+    UserPremiumSubscription,
+)
 
 
 VALID_LANGUAGES = SUPPORTED_LANGUAGES
@@ -44,6 +51,7 @@ def upsert_telegram_user(
     username="",
     language="uz",
     phone_number="",
+    referred_by=None,
 ):
     first_name, last_name = split_full_name(full_name)
     defaults = {
@@ -62,6 +70,8 @@ def upsert_telegram_user(
         telegram_id=telegram_id,
         defaults=defaults,
     )
+    if created and referred_by:
+        _attach_referrer(user, referred_by)
     if not created:
         update_fields = []
         for field, value in defaults.items():
@@ -73,6 +83,28 @@ def upsert_telegram_user(
         if update_fields:
             user.save(update_fields=update_fields + ["updated_at"])
     return user
+
+
+def _attach_referrer(user, referrer_telegram_id):
+    """Link a freshly created user to the inviter (never self, only if inviter exists)."""
+    try:
+        referrer_telegram_id = int(referrer_telegram_id)
+    except (TypeError, ValueError):
+        return
+    if referrer_telegram_id == user.telegram_id:
+        return
+    referrer = TelegramUser.objects.filter(telegram_id=referrer_telegram_id).first()
+    if not referrer:
+        return
+    user.referred_by = referrer
+    user.save(update_fields=("referred_by", "updated_at"))
+
+
+def build_referral_link(user) -> str:
+    username = (getattr(settings, "BOT_USERNAME", "") or "").strip().lstrip("@")
+    if not username:
+        return ""
+    return f"https://t.me/{username}?start=ref_{user.telegram_id}"
 
 
 def set_telegram_user_bot_active(*, telegram_id: int, bot_is_active: bool):
@@ -125,7 +157,7 @@ def get_user_subscription_snapshot(user):
         return {
             **base,
             "status": "active",
-            "plan": active.plan.name,
+            "plan": active.plan.name if active.plan else "Premium",
             "starts_at": active.starts_at,
             "expires_at": active.expires_at,
         }
@@ -158,7 +190,7 @@ def get_user_subscription_snapshot(user):
         return {
             **base,
             "status": "expired",
-            "plan": last_subscription.plan.name,
+            "plan": last_subscription.plan.name if last_subscription.plan else "Premium",
             "starts_at": last_subscription.starts_at,
             "expires_at": last_subscription.expires_at,
         }
@@ -271,40 +303,29 @@ class AtmosPaymentService:
 
     @staticmethod
     def client_checkout_url(url: str) -> str:
-        """Rewrite dev-checkout to our HTTPS proxy in sandbox (Telegram needs HTTPS).
-
-        Merchant sandbox checkout lives on test-checkout.pays.uz and must not be proxied
-        through dev-checkout — that backend returns 404/500 for merchant transactions.
-        """
-        normalized = AtmosPaymentService._normalize_checkout_url(url)
-        if not normalized or not settings.ATMOS_TEST_MODE:
-            return normalized
-        if "test-checkout.pays.uz" in normalized or "checkout.pays.uz" in normalized:
-            return normalized
-        proxy_base = (settings.ATMOS_CHECKOUT_PROXY_BASE or "").strip().rstrip("/")
-        if not proxy_base:
-            return normalized
-        for host in ("dev-checkout.atmos.uz",):
-            normalized = normalized.replace(f"https://{host}", proxy_base)
-            normalized = normalized.replace(f"http://{host}", proxy_base)
-        return normalized
+        """Normalize checkout URL (Atmos: test-checkout.pays.uz, no dev-checkout proxy)."""
+        return AtmosPaymentService._normalize_checkout_url(url)
 
     def _payment_flow(self) -> str:
         flow = (settings.ATMOS_PAYMENT_FLOW or "").strip().lower()
         if flow in {"merchant", "invoice"}:
             return flow
-        return "invoice" if settings.ATMOS_TEST_MODE else "merchant"
+        return "merchant"
 
     def _public_checkout_base(self) -> str:
-        if self._payment_flow() == "merchant":
-            if settings.ATMOS_TEST_MODE:
-                return "https://test-checkout.pays.uz"
-            return "https://checkout.pays.uz"
         if settings.ATMOS_TEST_MODE:
-            proxy = (settings.ATMOS_CHECKOUT_PROXY_BASE or "").strip().rstrip("/")
-            if proxy:
-                return proxy
-        return settings.ATMOS_CHECKOUT_PAGE_BASE.rstrip("/")
+            return "https://test-checkout.pays.uz"
+        return "https://checkout.pays.uz"
+
+    def _merchant_headers(self, access_token: str) -> dict:
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/json",
+        }
+        api_key = (settings.ATMOS_API_KEY or "").strip()
+        if api_key:
+            headers["X-Api-Key"] = api_key
+        return headers
 
     @staticmethod
     def _is_success_code(code) -> bool:
@@ -388,18 +409,17 @@ class AtmosPaymentService:
         }
         if self.terminal_id:
             payload["terminal_id"] = str(self.terminal_id).strip()
+        redirect = (self.return_url or "").strip()
+        if redirect:
+            payload["redirect_link"] = redirect
         return payload
 
     def _create_merchant_transaction(self, order, access_token):
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Accept": "application/json",
-        }
         payload = self._build_merchant_pay_payload(order)
         raw = self._request_json(
             "/merchant/pay/create",
             payload=payload,
-            headers=headers,
+            headers=self._merchant_headers(access_token),
         )
         return raw, payload
 
@@ -468,10 +488,6 @@ class AtmosPaymentService:
 
     def get_merchant_transaction(self, transaction_id: str) -> dict:
         access_token, _ = self.get_access_token()
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Accept": "application/json",
-        }
         payload = {
             "store_id": int(self._normalize_store_id(self.store_id)),
             "transaction_id": int(transaction_id),
@@ -479,7 +495,84 @@ class AtmosPaymentService:
         return self._request_json(
             "/merchant/pay/get",
             payload=payload,
-            headers=headers,
+            headers=self._merchant_headers(access_token),
+        )
+
+    def pre_apply(self, *, transaction_id, card_number=None, expiry=None, card_token=None) -> dict:
+        """POST /merchant/pay/pre-apply.
+
+        With card_number+expiry: Atmos sends an OTP via SMS (one-time payment).
+        With card_token (bound card): no SMS is sent (recurring/auto payment).
+        """
+        access_token, _ = self.get_access_token()
+        payload = {
+            "store_id": int(self._normalize_store_id(self.store_id)),
+            "transaction_id": int(transaction_id),
+        }
+        if card_token:
+            payload["card_token"] = str(card_token).strip()
+        else:
+            payload["card_number"] = str(card_number).replace(" ", "").strip()
+            payload["expiry"] = str(expiry).strip()
+        return self._request_json(
+            "/merchant/pay/pre-apply",
+            payload=payload,
+            headers=self._merchant_headers(access_token),
+        )
+
+    def bind_card_init(self, *, card_number, expiry) -> dict:
+        """POST /partner/bind-card/init: start linking a card; Atmos sends an SMS code."""
+        access_token, _ = self.get_access_token()
+        payload = {
+            "card_number": str(card_number).replace(" ", "").strip(),
+            "expiry": str(expiry).strip(),
+        }
+        return self._request_json(
+            "/partner/bind-card/init",
+            payload=payload,
+            headers=self._merchant_headers(access_token),
+        )
+
+    def bind_card_confirm(self, *, transaction_id, otp) -> dict:
+        """POST /partner/bind-card/confirm: confirm with SMS code, returns card_token."""
+        access_token, _ = self.get_access_token()
+        otp_value = str(otp).strip()
+        payload = {
+            "transaction_id": int(transaction_id),
+            "otp": otp_value,
+        }
+        return self._request_json(
+            "/partner/bind-card/confirm",
+            payload=payload,
+            headers=self._merchant_headers(access_token),
+        )
+
+    def remove_card(self, *, card_id, card_token) -> dict:
+        """POST /partner/remove-card: cancel a previously linked card token."""
+        access_token, _ = self.get_access_token()
+        payload = {
+            "id": int(card_id) if str(card_id).isdigit() else card_id,
+            "token": str(card_token).strip(),
+        }
+        return self._request_json(
+            "/partner/remove-card",
+            payload=payload,
+            headers=self._merchant_headers(access_token),
+        )
+
+    def apply(self, *, transaction_id, otp) -> dict:
+        """POST /merchant/pay/apply: confirm with OTP and charge the card."""
+        access_token, _ = self.get_access_token()
+        otp_value = str(otp).strip()
+        payload = {
+            "otp": int(otp_value) if otp_value.isdigit() else otp_value,
+            "store_id": int(self._normalize_store_id(self.store_id)),
+            "transaction_id": int(transaction_id),
+        }
+        return self._request_json(
+            "/merchant/pay/apply",
+            payload=payload,
+            headers=self._merchant_headers(access_token),
         )
 
     @staticmethod
@@ -752,6 +845,373 @@ def build_bot_payment_url(order):
     return AtmosPaymentService.client_checkout_url(payment_url)
 
 
+CARD_SESSION_TOKEN_TTL = 900
+
+
+def build_card_session_token(*, order_id: str, exp: int) -> str:
+    secret = (settings.BOT_API_SECRET or "").strip()
+    if not secret:
+        return ""
+    payload = f"{order_id}:{exp}"
+    return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+
+def verify_card_session_token(*, order_id: str, exp: int, token: str) -> bool:
+    if not token or exp < int(time.time()):
+        return False
+    expected = build_card_session_token(order_id=order_id, exp=exp)
+    if not expected:
+        return False
+    return hmac.compare_digest(expected, token)
+
+
+def start_card_payment(*, user, plan):
+    """Create Atmos transaction (merchant/pay/create) for the card form."""
+    order = create_atmos_order(user=user, plan=plan)
+    error = ""
+    raw = order.response_payload or {}
+    if isinstance(raw, dict) and raw.get("error"):
+        error = str(raw["error"])
+    if not order.atmos_transaction_id:
+        error = error or "Atmos did not return transaction id."
+    return order, error
+
+
+def submit_card_for_payment(*, order, card_number, expiry):
+    """Send card to Atmos pre-apply; Atmos sends OTP via SMS."""
+    service = AtmosPaymentService()
+    if not service.is_configured() or not order.atmos_transaction_id:
+        return {"ok": False, "error": "Payment is not configured."}
+    try:
+        raw = service.pre_apply(
+            transaction_id=order.atmos_transaction_id,
+            card_number=card_number,
+            expiry=expiry,
+        )
+    except (OSError, URLError, ValueError) as exc:
+        return {"ok": False, "error": service._format_request_error(exc)}
+    api_error = service._extract_api_error(raw)
+    if api_error:
+        return {"ok": False, "error": api_error, "raw": raw}
+    return {"ok": True, "raw": raw}
+
+
+def confirm_card_payment(*, order, otp):
+    """Confirm Atmos transaction with OTP (apply); activate subscription on success."""
+    service = AtmosPaymentService()
+    if not service.is_configured() or not order.atmos_transaction_id:
+        return {"ok": False, "error": "Payment is not configured."}
+    try:
+        raw = service.apply(transaction_id=order.atmos_transaction_id, otp=otp)
+    except (OSError, URLError, ValueError) as exc:
+        return {"ok": False, "error": service._format_request_error(exc)}
+    api_error = service._extract_api_error(raw)
+    store_transaction = raw.get("store_transaction") or {}
+    confirmed = bool(store_transaction.get("confirmed")) or service._is_success_code(
+        (raw.get("result") or {}).get("code")
+    )
+    if api_error or not confirmed:
+        return {"ok": False, "error": api_error or "Payment was not confirmed.", "raw": raw}
+
+    transaction_id = str(
+        store_transaction.get("success_trans_id")
+        or store_transaction.get("trans_id")
+        or order.atmos_transaction_id
+    )
+    AtmosTransaction.objects.update_or_create(
+        order=order,
+        transaction_id=transaction_id,
+        defaults={
+            "status": AtmosTransaction.Status.SUCCESS,
+            "amount": order.amount,
+            "currency": order.currency,
+            "provider_payload": raw,
+            "performed_at": timezone.now(),
+        },
+    )
+    order.mark_as_paid(atmos_transaction_id=transaction_id, payload=raw)
+    after_order_paid(order)
+    return {"ok": True, "raw": raw}
+
+
+def _notify_payment_success_safe(order):
+    """Send the Telegram success notification without breaking the payment flow."""
+    try:
+        from .notifications import notify_payment_success
+
+        notify_payment_success(order)
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "Payment success notification failed order=%s",
+            getattr(order, "merchant_order_id", None) or getattr(order, "pk", None),
+        )
+
+
+def after_order_paid(order):
+    """Run side effects after an order is marked paid: referral reward + notification."""
+    try:
+        grant_referral_reward(order)
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "Referral reward failed order=%s",
+            getattr(order, "merchant_order_id", None) or getattr(order, "pk", None),
+        )
+    _notify_payment_success_safe(order)
+
+
+# ---------------------------------------------------------------------------
+# Card binding + recurring (token) payments
+# ---------------------------------------------------------------------------
+
+
+def start_card_binding(*, card_number, expiry):
+    """Begin Atmos card linking: /partner/bind-card/init (Atmos sends an SMS code)."""
+    service = AtmosPaymentService()
+    if not service.is_configured():
+        return {"ok": False, "error": "Payment is not configured."}
+    try:
+        raw = service.bind_card_init(card_number=card_number, expiry=expiry)
+    except (OSError, URLError, ValueError) as exc:
+        return {"ok": False, "error": service._format_request_error(exc)}
+    api_error = service._extract_api_error(raw)
+    transaction_id = raw.get("transaction_id")
+    if api_error or not transaction_id:
+        return {"ok": False, "error": api_error or "Card binding could not be started.", "raw": raw}
+    return {
+        "ok": True,
+        "transaction_id": str(transaction_id),
+        "phone": raw.get("phone", ""),
+        "raw": raw,
+    }
+
+
+def confirm_card_binding(*, user, transaction_id, otp):
+    """Confirm card linking with the SMS code and persist a BoundCard for the user."""
+    service = AtmosPaymentService()
+    if not service.is_configured():
+        return {"ok": False, "error": "Payment is not configured."}
+    try:
+        raw = service.bind_card_confirm(transaction_id=transaction_id, otp=otp)
+    except (OSError, URLError, ValueError) as exc:
+        return {"ok": False, "error": service._format_request_error(exc)}
+    api_error = service._extract_api_error(raw)
+    data = raw.get("data") or {}
+    card_token = data.get("card_token")
+    if api_error or not card_token:
+        return {"ok": False, "error": api_error or "Card binding failed.", "raw": raw}
+
+    with transaction.atomic():
+        bound = BoundCard.objects.create(
+            user=user,
+            card_id=str(data.get("card_id") or ""),
+            card_token=str(card_token),
+            masked_pan=str(data.get("pan") or ""),
+            expiry=str(data.get("expiry") or ""),
+            card_holder=str(data.get("card_holder") or ""),
+            phone=str(data.get("phone") or ""),
+            is_active=True,
+        )
+        BoundCard.objects.filter(user=user, is_active=True).exclude(pk=bound.pk).update(
+            is_active=False
+        )
+    return {"ok": True, "bound_card": bound, "raw": raw}
+
+
+def charge_subscription(*, user, plan, bound_card, is_auto_renewal=False):
+    """Charge a bound card for a subscription period via merchant/pay/{create,pre-apply,apply}."""
+    service = AtmosPaymentService()
+    if not service.is_configured():
+        return {"ok": False, "error": "Payment is not configured."}
+    if not bound_card or not bound_card.card_token:
+        return {"ok": False, "error": "No bound card available."}
+
+    order = create_atmos_order(user=user, plan=plan)
+    order.bound_card = bound_card
+    order.is_auto_renewal = is_auto_renewal
+    order.save(update_fields=("bound_card", "is_auto_renewal", "updated_at"))
+
+    if not order.atmos_transaction_id:
+        error = ""
+        raw = order.response_payload or {}
+        if isinstance(raw, dict) and raw.get("error"):
+            error = str(raw["error"])
+        return {"ok": False, "error": error or "Atmos did not return transaction id.", "order": order}
+
+    try:
+        pre_raw = service.pre_apply(
+            transaction_id=order.atmos_transaction_id,
+            card_token=bound_card.card_token,
+        )
+    except (OSError, URLError, ValueError) as exc:
+        return {"ok": False, "error": service._format_request_error(exc), "order": order}
+    pre_error = service._extract_api_error(pre_raw)
+    if pre_error:
+        _mark_order_failed(order, pre_raw)
+        return {"ok": False, "error": pre_error, "order": order, "raw": pre_raw}
+
+    try:
+        raw = service.apply(
+            transaction_id=order.atmos_transaction_id,
+            otp=settings.ATMOS_TOKEN_PAYMENT_OTP,
+        )
+    except (OSError, URLError, ValueError) as exc:
+        return {"ok": False, "error": service._format_request_error(exc), "order": order}
+
+    api_error = service._extract_api_error(raw)
+    store_transaction = raw.get("store_transaction") or {}
+    confirmed = bool(store_transaction.get("confirmed")) or service._is_success_code(
+        (raw.get("result") or {}).get("code")
+    )
+    if api_error or not confirmed:
+        _mark_order_failed(order, raw)
+        return {"ok": False, "error": api_error or "Payment was not confirmed.", "order": order, "raw": raw}
+
+    transaction_id = str(
+        store_transaction.get("success_trans_id")
+        or store_transaction.get("trans_id")
+        or order.atmos_transaction_id
+    )
+    AtmosTransaction.objects.update_or_create(
+        order=order,
+        transaction_id=transaction_id,
+        defaults={
+            "status": AtmosTransaction.Status.SUCCESS,
+            "amount": order.amount,
+            "currency": order.currency,
+            "provider_payload": raw,
+            "performed_at": timezone.now(),
+        },
+    )
+    subscription = order.mark_as_paid(atmos_transaction_id=transaction_id, payload=raw)
+    after_order_paid(order)
+    return {"ok": True, "order": order, "subscription": subscription, "raw": raw}
+
+
+def _mark_order_failed(order, payload):
+    order.status = AtmosOrder.Status.FAILED
+    if payload:
+        order.response_payload = payload
+    order.save(update_fields=("status", "response_payload", "updated_at"))
+
+
+def remove_bound_card(user):
+    """Remove the active bound card (Atmos /partner/remove-card) and stop auto-renewal."""
+    service = AtmosPaymentService()
+    card = (
+        BoundCard.objects.filter(user=user, is_active=True)
+        .order_by("-created_at")
+        .first()
+    )
+    error = ""
+    if card and service.is_configured():
+        try:
+            raw = service.remove_card(card_id=card.card_id, card_token=card.card_token)
+            error = service._extract_api_error(raw)
+        except (OSError, URLError, ValueError) as exc:
+            error = service._format_request_error(exc)
+            logger.warning("Atmos remove-card failed user=%s: %s", user.telegram_id, error)
+
+    if card:
+        card.mark_removed()
+    UserPremiumSubscription.objects.filter(user=user, is_active=True, auto_renew=True).update(
+        auto_renew=False
+    )
+    return {"ok": not error, "removed": bool(card), "error": error}
+
+
+# ---------------------------------------------------------------------------
+# Referral rewards
+# ---------------------------------------------------------------------------
+
+
+def _plan_is_yearly(plan):
+    if not plan:
+        return False
+    return plan.period == SubscriptionPlan.BillingPeriod.YEAR
+
+
+def extend_premium_days(*, user, days, source=UserPremiumSubscription.Source.REFERRAL):
+    """Add `days` of premium to a user, stacking after any current active period."""
+    if days <= 0:
+        return None
+    from datetime import timedelta
+
+    with transaction.atomic():
+        active = (
+            UserPremiumSubscription.objects.select_for_update()
+            .filter(user=user, is_active=True)
+            .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()))
+            .order_by("-expires_at")
+            .first()
+        )
+        if active and active.expires_at is None:
+            return active
+        starts_at = active.expires_at if active and active.expires_at else timezone.now()
+        return UserPremiumSubscription.objects.create(
+            user=user,
+            plan=None,
+            starts_at=starts_at,
+            expires_at=starts_at + timedelta(days=days),
+            is_active=True,
+            auto_renew=False,
+            source=source,
+        )
+
+
+def grant_referral_reward(order):
+    """Reward the inviter when the invited user makes their FIRST successful payment."""
+    user = order.user
+    referrer_id = getattr(user, "referred_by_id", None)
+    if not referrer_id or user.referral_rewarded:
+        return None
+
+    days = (
+        settings.ATMOS_REFERRAL_BONUS_DAYS_YEARLY
+        if _plan_is_yearly(order.plan)
+        else settings.ATMOS_REFERRAL_BONUS_DAYS_MONTHLY
+    )
+
+    with transaction.atomic():
+        locked_user = TelegramUser.objects.select_for_update().get(pk=user.pk)
+        if locked_user.referral_rewarded or not locked_user.referred_by_id:
+            return None
+        referrer = TelegramUser.objects.filter(pk=locked_user.referred_by_id).first()
+        if not referrer:
+            return None
+        locked_user.referral_rewarded = True
+        locked_user.save(update_fields=("referral_rewarded", "updated_at"))
+        extend_premium_days(user=referrer, days=days)
+
+    try:
+        from .notifications import notify_referral_reward
+
+        notify_referral_reward(referrer=referrer, invited_user=user, days=days)
+    except Exception:  # noqa: BLE001
+        logger.exception("Referral reward notification failed referrer=%s", referrer.pk)
+    return referrer
+
+
+def get_referral_stats(user):
+    """Counts for the referral panel: invited users, paying ones, bonus days earned."""
+    invited_qs = TelegramUser.objects.filter(referred_by=user)
+    paid_count = invited_qs.filter(referral_rewarded=True).count()
+    bonus_days = (
+        UserPremiumSubscription.objects.filter(
+            user=user, source=UserPremiumSubscription.Source.REFERRAL
+        )
+        .count()
+    )
+    monthly = settings.ATMOS_REFERRAL_BONUS_DAYS_MONTHLY
+    yearly = settings.ATMOS_REFERRAL_BONUS_DAYS_YEARLY
+    return {
+        "invited_count": invited_qs.count(),
+        "paid_count": paid_count,
+        "reward_subscriptions": bonus_days,
+        "bonus_days_monthly": monthly,
+        "bonus_days_yearly": yearly,
+    }
+
+
 def extract_callback_value(payload, *keys):
     for key in keys:
         value = payload.get(key)
@@ -835,6 +1295,7 @@ def sync_atmos_order_payment(order) -> bool:
         },
     )
     order.mark_as_paid(atmos_transaction_id=transaction_id, payload=raw)
+    after_order_paid(order)
     return True
 
 

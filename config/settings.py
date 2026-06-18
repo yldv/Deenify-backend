@@ -208,6 +208,12 @@ SPECTACULAR_SETTINGS = {
 
 from config.jazzmin_settings import JAZZMIN_SETTINGS, JAZZMIN_UI_TWEAKS  # noqa: E402
 
+# Telegram bot token (shared .env with the bot) so the backend can notify users
+# directly after a successful payment (delete the catalog message, send confirmation).
+BOT_TOKEN = os.environ.get('BOT_TOKEN', '').strip()
+# Bot username (without @) used to build referral deep links: t.me/<BOT_USERNAME>?start=ref_<id>
+BOT_USERNAME = os.environ.get('BOT_USERNAME', 'DeenifyUzBot').strip().lstrip('@')
+
 ATMOS_STORE_ID = os.environ.get('ATMOS_STORE_ID', '').strip()
 ATMOS_TERMINAL_ID = os.environ.get('ATMOS_TERMINAL_ID', '').strip()
 ATMOS_CONSUMER_KEY = os.environ.get('ATMOS_CONSUMER_KEY', '').strip()
@@ -242,7 +248,7 @@ else:
 # merchant = POST /merchant/pay/create + pays.uz page; invoice = /checkout/invoice/create (sandbox fallback).
 ATMOS_PAYMENT_FLOW = os.environ.get('ATMOS_PAYMENT_FLOW', '').strip().lower()
 if not ATMOS_PAYMENT_FLOW:
-    ATMOS_PAYMENT_FLOW = 'invoice' if ATMOS_TEST_MODE else 'merchant'
+    ATMOS_PAYMENT_FLOW = 'merchant'
 # Legacy: nginx proxy for old dev-checkout.atmos.uz flow (no longer used by default).
 _checkout_proxy_override = os.environ.get('ATMOS_CHECKOUT_PROXY_BASE', '').strip().rstrip('/')
 if _checkout_proxy_override:
@@ -256,6 +262,21 @@ ATMOS_SIGN_ALGORITHM = os.environ.get('ATMOS_SIGN_ALGORITHM', 'sha256')
 ATMOS_INVOICE_EXPIRATION_SECONDS = int(
     os.environ.get('ATMOS_INVOICE_EXPIRATION_SECONDS', '3600')
 )
+# OTP used by merchant/pay/apply when charging a previously bound card (card_token):
+# Atmos does not send an SMS for token charges. Sandbox accepts 111111.
+# CONFIRM the production value with Atmos before going live.
+ATMOS_TOKEN_PAYMENT_OTP = os.environ.get('ATMOS_TOKEN_PAYMENT_OTP', '111111').strip()
+# Referral bonus days granted to the inviter on the invited user's FIRST payment.
+ATMOS_REFERRAL_BONUS_DAYS_MONTHLY = int(
+    os.environ.get('ATMOS_REFERRAL_BONUS_DAYS_MONTHLY', '10')
+)
+ATMOS_REFERRAL_BONUS_DAYS_YEARLY = int(
+    os.environ.get('ATMOS_REFERRAL_BONUS_DAYS_YEARLY', '30')
+)
+# Recurring billing (charge_due_subscriptions): renew this many days before expiry,
+# and give up auto-renewal (notify the user) after this many days of failed retries.
+ATMOS_RENEW_LEAD_DAYS = int(os.environ.get('ATMOS_RENEW_LEAD_DAYS', '1'))
+ATMOS_RENEW_FAIL_GRACE_DAYS = int(os.environ.get('ATMOS_RENEW_FAIL_GRACE_DAYS', '3'))
 
 # Quiz (Telegram bot round-based flow)
 DEENIFY_QUIZ_DEFAULT_CATEGORY_SLUG = os.environ.get('DEENIFY_QUIZ_DEFAULT_CATEGORY_SLUG', 'islam')
