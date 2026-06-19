@@ -6,7 +6,7 @@ from aiogram.types import Message
 
 from bot.config import BotConfig
 from bot.context import get_language, preserve_language
-from bot.handlers.common import show_home_menu
+from bot.handlers.common import resolve_is_premium, show_home_menu
 from bot.keyboards import cancel_keyboard, help_keyboard, home_keyboard
 from bot.states import HelpState
 from bot.texts import all_button_texts, get_text
@@ -113,6 +113,7 @@ async def help_message_received(
 
 
 @router.message(HelpState.menu, F.text.in_(all_button_texts("back")))
-async def help_back(message: Message, state: FSMContext):
+async def help_back(message: Message, state: FSMContext, api_client):
     language = await preserve_language(state)
-    await show_home_menu(message, language)
+    is_premium = await resolve_is_premium(api_client, message.from_user.id)
+    await show_home_menu(message, language, is_premium=is_premium)

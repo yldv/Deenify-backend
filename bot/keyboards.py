@@ -34,17 +34,19 @@ def phone_keyboard(language: str):
     )
 
 
-def home_keyboard(language: str):
+def home_keyboard(language: str, is_premium: bool = False):
+    # "Buy premium" only makes sense for users without an active subscription.
+    second_row = []
+    if not is_premium:
+        second_row.append(KeyboardButton(text=get_text(language, "buy_premium_button")))
+    second_row.append(KeyboardButton(text=get_text(language, "settings_invite_friends")))
     return ReplyKeyboardMarkup(
         keyboard=[
             [
                 KeyboardButton(text=get_text(language, "take_test")),
                 KeyboardButton(text=get_text(language, "restart_from_start")),
             ],
-            [
-                KeyboardButton(text=get_text(language, "buy_premium_button")),
-                KeyboardButton(text=get_text(language, "settings_invite_friends")),
-            ],
+            second_row,
             [KeyboardButton(text=get_text(language, "settings"))],
         ],
         resize_keyboard=True,
@@ -52,13 +54,16 @@ def home_keyboard(language: str):
     )
 
 
-def settings_keyboard(language: str):
+def settings_keyboard(language: str, is_premium: bool = False):
+    # "Cancel subscription" only makes sense for users who actually have premium.
+    first_row = [KeyboardButton(text=get_text(language, "settings_subscription_status"))]
+    if is_premium:
+        first_row.append(
+            KeyboardButton(text=get_text(language, "settings_cancel_subscription"))
+        )
     return ReplyKeyboardMarkup(
         keyboard=[
-            [
-                KeyboardButton(text=get_text(language, "settings_subscription_status")),
-                KeyboardButton(text=get_text(language, "settings_cancel_subscription")),
-            ],
+            first_row,
             [
                 KeyboardButton(text=get_text(language, "help")),
                 KeyboardButton(text=get_text(language, "change_language")),

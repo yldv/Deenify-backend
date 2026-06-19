@@ -6,7 +6,7 @@ from aiogram.types import Message
 
 from bot.api_client import ApiClientError, NotFoundError
 from bot.context import get_language, preserve_language
-from bot.handlers.common import show_home_menu
+from bot.handlers.common import resolve_is_premium, show_home_menu
 from bot.handlers.feedback import start_feedback_survey
 from bot.keyboards import home_keyboard, language_keyboard, settings_keyboard
 from bot.services.payment import send_subscription_offers
@@ -18,18 +18,21 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 
-async def show_settings_menu(message: Message, state: FSMContext, language: str):
+async def show_settings_menu(
+    message: Message, state: FSMContext, language: str, is_premium: bool = False
+):
     await state.set_state(SettingsState.menu)
     await message.answer(
         get_text(language, "settings_section"),
-        reply_markup=settings_keyboard(language),
+        reply_markup=settings_keyboard(language, is_premium=is_premium),
     )
 
 
 @router.message(F.text.in_(all_button_texts("settings")))
-async def open_settings(message: Message, state: FSMContext):
+async def open_settings(message: Message, state: FSMContext, api_client):
     language = await get_language(state)
-    await show_settings_menu(message, state, language)
+    is_premium = await resolve_is_premium(api_client, message.from_user.id)
+    await show_settings_menu(message, state, language, is_premium=is_premium)
 
 
 @router.message(F.text.in_(all_button_texts("buy_premium_button")))
@@ -54,7 +57,7 @@ async def buy_premium(message: Message, state: FSMContext, api_client):
             get_text(language, "buy_premium_already_active")
             + "\n\n"
             + build_subscription_summary(language=language, user=user),
-            reply_markup=home_keyboard(language),
+            reply_markup=home_keyboard(language, is_premium=True),
         )
         return
 
@@ -88,7 +91,9 @@ async def show_subscription_status(message: Message, state: FSMContext, api_clie
     else:
         text = build_subscription_summary(language=language, user=user)
 
-    await message.answer(text, reply_markup=settings_keyboard(language))
+    await message.answer(
+        text, reply_markup=settings_keyboard(language, is_premium=bool(user.get("is_premium")))
+    )
 
     subscription = user.get("subscription") or {}
     if not user.get("is_premium") and subscription.get("status") in {
@@ -128,9 +133,10 @@ async def settings_invite_friends(message: Message, state: FSMContext, api_clien
         monthly=data.get("bonus_days_monthly", 0),
         yearly=data.get("bonus_days_yearly", 0),
     )
+    is_premium = await resolve_is_premium(api_client, message.from_user.id)
     await message.answer(
         text,
-        reply_markup=home_keyboard(language),
+        reply_markup=home_keyboard(language, is_premium=is_premium),
         parse_mode="HTML",
         disable_web_page_preview=True,
     )
@@ -185,6 +191,7 @@ async def settings_change_language(message: Message, state: FSMContext):
 
 
 @router.message(SettingsState.menu, F.text.in_(all_button_texts("back")))
-async def settings_back(message: Message, state: FSMContext):
+async def settings_back(message: Message, state: FSMContext, api_client):
     language = await preserve_language(state)
-    await show_home_menu(message, language)
+    is_premium = await resolve_is_premium(api_client, message.from_user.id)
+    await show_home_menu(message, language, is_premium=is_premium)

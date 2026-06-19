@@ -6,7 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from bot.api_client import ApiClientError, NotFoundError
-from bot.handlers.common import show_home_menu, user_full_name
+from bot.handlers.common import resolve_is_premium, show_home_menu, user_full_name
 from bot.handlers.settings import show_settings_menu
 from bot.keyboards import home_keyboard, language_keyboard, phone_keyboard
 from bot.states import ChoosingLanguage, RegistrationState
@@ -53,9 +53,22 @@ async def start_command(
 
     if user and user.get("is_registered"):
         language = normalize_language(user.get("language", "uz"))
+        if referrer_id:
+            # Attach the inviter even for an already-registered user (the backend
+            # only links them if they have no inviter yet and have not paid).
+            try:
+                await api_client.get_or_create_user(
+                    telegram_id=message.from_user.id,
+                    full_name=user_full_name(message),
+                    username=message.from_user.username or "",
+                    language=language,
+                    referred_by=referrer_id,
+                )
+            except ApiClientError:
+                logger.warning("Failed to attach referrer for registered user")
         await state.update_data(language=language)
         await state.clear()
-        await show_home_menu(message, language)
+        await show_home_menu(message, language, is_premium=bool(user.get("is_premium")))
         return
 
     await state.set_state(ChoosingLanguage.language)
@@ -82,11 +95,12 @@ async def language_selected(message: Message, state: FSMContext, api_client):
             return_to = data.get("return_to")
             await state.update_data(return_to=None)
             await message.answer(get_text(language, "language_updated"))
+            is_premium = bool(user.get("is_premium"))
             if return_to == "settings":
-                await show_settings_menu(message, state, language)
+                await show_settings_menu(message, state, language, is_premium=is_premium)
             else:
                 await state.clear()
-                await show_home_menu(message, language)
+                await show_home_menu(message, language, is_premium=is_premium)
         else:
             await api_client.get_or_create_user(
                 telegram_id=telegram_id,
@@ -123,11 +137,12 @@ async def invalid_language(message: Message, state: FSMContext):
 
 
 @router.callback_query(F.data == "back_menu")
-async def back_to_menu(callback: CallbackQuery, state: FSMContext):
+async def back_to_menu(callback: CallbackQuery, state: FSMContext, api_client):
     data = await state.get_data()
     language = normalize_language(data.get("language", "uz"))
+    is_premium = await resolve_is_premium(api_client, callback.from_user.id)
     await callback.message.answer(
         get_text(language, "home_menu"),
-        reply_markup=home_keyboard(language),
+        reply_markup=home_keyboard(language, is_premium=is_premium),
     )
     await callback.answer()

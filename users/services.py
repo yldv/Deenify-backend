@@ -70,7 +70,7 @@ def upsert_telegram_user(
         telegram_id=telegram_id,
         defaults=defaults,
     )
-    if created and referred_by:
+    if referred_by:
         _attach_referrer(user, referred_by)
     if not created:
         update_fields = []
@@ -86,12 +86,24 @@ def upsert_telegram_user(
 
 
 def _attach_referrer(user, referrer_telegram_id):
-    """Link a freshly created user to the inviter (never self, only if inviter exists)."""
+    """Link a user to the inviter.
+
+    Works for both brand-new and already-registered users, as long as the user
+    does not have an inviter yet and has not paid yet (so they still count as a
+    fresh referral whose first payment can reward the inviter). Never self-links.
+    """
+    if user.referred_by_id:
+        return
     try:
         referrer_telegram_id = int(referrer_telegram_id)
     except (TypeError, ValueError):
         return
     if referrer_telegram_id == user.telegram_id:
+        return
+    # Already-converted users can't be (re)attributed to a new inviter.
+    if user.referral_rewarded:
+        return
+    if user.atmos_orders.filter(status=AtmosOrder.Status.PAID).exists():
         return
     referrer = TelegramUser.objects.filter(telegram_id=referrer_telegram_id).first()
     if not referrer:
@@ -1156,27 +1168,36 @@ def _plan_is_yearly(plan):
 
 
 def extend_premium_days(*, user, days, source=UserPremiumSubscription.Source.REFERRAL):
-    """Add `days` of premium to a user, stacking after any current active period."""
+    """Add `days` of premium to a user.
+
+    If the user already has a current active subscription, its expiry is pushed
+    forward in place so the visible "premium until" date reflects the bonus
+    immediately. Otherwise a fresh bonus period is created starting now.
+    """
     if days <= 0:
         return None
     from datetime import timedelta
 
+    now = timezone.now()
     with transaction.atomic():
         active = (
             UserPremiumSubscription.objects.select_for_update()
-            .filter(user=user, is_active=True)
-            .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()))
+            .filter(user=user, is_active=True, starts_at__lte=now)
+            .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
             .order_by("-expires_at")
             .first()
         )
-        if active and active.expires_at is None:
+        if active:
+            if active.expires_at is None:
+                return active  # already lifetime, nothing to add
+            active.expires_at = active.expires_at + timedelta(days=days)
+            active.save(update_fields=("expires_at", "updated_at"))
             return active
-        starts_at = active.expires_at if active and active.expires_at else timezone.now()
         return UserPremiumSubscription.objects.create(
             user=user,
             plan=None,
-            starts_at=starts_at,
-            expires_at=starts_at + timedelta(days=days),
+            starts_at=now,
+            expires_at=now + timedelta(days=days),
             is_active=True,
             auto_renew=False,
             source=source,

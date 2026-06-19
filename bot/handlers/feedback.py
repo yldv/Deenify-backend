@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery, Message
 from bot.api_client import ApiClientError
 from bot.config import BotConfig
 from bot.context import get_language, preserve_language
-from bot.handlers.common import show_home_menu
+from bot.handlers.common import resolve_is_premium, show_home_menu
 from bot.keyboards import (
     FEEDBACK_DECLINE_PREFIX,
     FEEDBACK_REASON_PREFIX,
@@ -175,4 +175,5 @@ async def feedback_text(
     )
     await preserve_language(state)
     await message.answer(get_text(language, "feedback_thanks"))
-    await show_home_menu(message, language)
+    is_premium = await resolve_is_premium(api_client, message.from_user.id)
+    await show_home_menu(message, language, is_premium=is_premium)

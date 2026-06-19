@@ -108,6 +108,14 @@ def _success_text(*, language: str, plan_name: str, until: str) -> str:
     )
 
 
+def _localized_plan_name(plan, language: str) -> str:
+    """Return the plan name in the user's language (modeltranslation field)."""
+    if not plan:
+        return "Premium"
+    localized = getattr(plan, f"name_{language}", None)
+    return (localized or plan.name or "Premium").strip()
+
+
 def _format_until(*, subscription, language: str) -> str:
     from bot.texts import get_text
 
@@ -168,7 +176,7 @@ def notify_payment_success(order) -> None:
             logger.exception("Failed to clear offer message for user=%s", chat_id)
 
     subscription = getattr(order, "premium_subscription", None)
-    plan_name = order.plan.name if order.plan else "Premium"
+    plan_name = _localized_plan_name(order.plan, language)
     until = _format_until(subscription=subscription, language=language)
     send_telegram_message(
         chat_id=chat_id,

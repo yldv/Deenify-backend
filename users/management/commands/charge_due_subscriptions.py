@@ -4,9 +4,11 @@ Atmos token charges are merchant-initiated (pull model), so this command should 
 on a daily schedule (systemd timer or cron). It renews each user's latest auto-renew
 subscription a few days before it expires, using the stored card token.
 
-Idempotency / no double-charge: after a successful renewal the just-charged
-subscription has ``auto_renew`` turned off, while the freshly created next period keeps
-``auto_renew=True``. Thus each user has at most one auto-renewing subscription at a time.
+Idempotency / no double-charge: a successful renewal extends the current active
+subscription in place (its ``expires_at`` moves forward by one period), so it falls
+outside the renewal window and is not picked up again. If a subscription is renewed
+only after it already expired, ``mark_as_paid`` starts a fresh period and disables
+auto-renew on the stale row, so each user keeps at most one auto-renewing subscription.
 """
 
 from datetime import timedelta
@@ -83,8 +85,8 @@ class Command(BaseCommand):
                 is_auto_renewal=True,
             )
             if result.get("ok"):
-                subscription.auto_renew = False
-                subscription.save(update_fields=("auto_renew", "updated_at"))
+                # mark_as_paid already extended the active period (or rotated a fresh
+                # one and disabled the stale row), so do not touch auto_renew here.
                 charged += 1
                 self.stdout.write(self.style.SUCCESS(f"  OK   {label}: renewed."))
                 continue
