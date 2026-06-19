@@ -154,6 +154,8 @@ TEXTS = {
         "subscribe_no_plans": "❌ Hozircha obuna tariflari mavjud emas.",
         "settings_invite_friends": "👥 Do'stlarni taklif qilish",
         "settings_cancel_subscription": "❌ Obunani bekor qilish",
+        "buy_premium_button": "💎 Premium sotib olish",
+        "buy_premium_already_active": "✅ Sizda Premium obuna allaqachon faol.",
         "referral_panel": (
             "👥 <b>Do'stlarni taklif qiling</b>\n\n"
             "Quyidagi havolangizni ulashing. Do'stingiz ro'yxatdan o'tib, "
@@ -325,6 +327,8 @@ TEXTS = {
         "subscribe_no_plans": "❌ Ҳозирча обуна тарифлари мавжуд эмас.",
         "settings_invite_friends": "👥 Дўстларни таклиф қилиш",
         "settings_cancel_subscription": "❌ Обунани бекор қилиш",
+        "buy_premium_button": "💎 Premium сотиб олиш",
+        "buy_premium_already_active": "✅ Сизда Premium обуна аллақачон фаол.",
         "referral_panel": (
             "👥 <b>Дўстларни таклиф қилинг</b>\n\n"
             "Қуйидаги ҳаволангизни улашинг. Дўстингиз рўйхатдан ўтиб, "
@@ -497,6 +501,8 @@ TEXTS = {
         "subscribe_no_plans": "❌ Тарифы подписки пока недоступны.",
         "settings_invite_friends": "👥 Пригласить друзей",
         "settings_cancel_subscription": "❌ Отменить подписку",
+        "buy_premium_button": "💎 Купить премиум",
+        "buy_premium_already_active": "✅ У вас уже активна Premium-подписка.",
         "referral_panel": (
             "👥 <b>Пригласите друзей</b>\n\n"
             "Поделитесь своей ссылкой. Когда друг зарегистрируется и оформит "

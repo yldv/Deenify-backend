@@ -32,6 +32,41 @@ async def open_settings(message: Message, state: FSMContext):
     await show_settings_menu(message, state, language)
 
 
+@router.message(F.text.in_(all_button_texts("buy_premium_button")))
+async def buy_premium(message: Message, state: FSMContext, api_client):
+    """Premium can be purchased at any time, even before the free questions run out."""
+    language = await get_language(state)
+    try:
+        user = await api_client.get_user(telegram_id=message.from_user.id)
+    except NotFoundError:
+        await message.answer(get_text(language, "not_found"), reply_markup=home_keyboard(language))
+        return
+    except ApiClientError:
+        logger.exception(
+            "Failed to load user for premium purchase telegram_id=%s",
+            message.from_user.id,
+        )
+        await message.answer(get_text(language, "error"), reply_markup=home_keyboard(language))
+        return
+
+    if user.get("is_premium"):
+        await message.answer(
+            get_text(language, "buy_premium_already_active")
+            + "\n\n"
+            + build_subscription_summary(language=language, user=user),
+            reply_markup=home_keyboard(language),
+        )
+        return
+
+    await send_subscription_offers(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        language=language,
+        api_client=api_client,
+        telegram_id=message.from_user.id,
+    )
+
+
 @router.message(SettingsState.menu, F.text.in_(all_button_texts("settings_subscription_status")))
 async def show_subscription_status(message: Message, state: FSMContext, api_client):
     language = await get_language(state)
@@ -57,6 +92,7 @@ async def show_subscription_status(message: Message, state: FSMContext, api_clie
 
     subscription = user.get("subscription") or {}
     if not user.get("is_premium") and subscription.get("status") in {
+        "free",
         "free_exhausted",
         "expired",
         "pending_payment",

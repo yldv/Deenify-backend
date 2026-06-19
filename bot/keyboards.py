@@ -42,9 +42,10 @@ def home_keyboard(language: str):
                 KeyboardButton(text=get_text(language, "restart_from_start")),
             ],
             [
+                KeyboardButton(text=get_text(language, "buy_premium_button")),
                 KeyboardButton(text=get_text(language, "settings_invite_friends")),
-                KeyboardButton(text=get_text(language, "settings")),
             ],
+            [KeyboardButton(text=get_text(language, "settings"))],
         ],
         resize_keyboard=True,
         is_persistent=True,

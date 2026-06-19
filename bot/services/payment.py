@@ -162,6 +162,8 @@ def build_subscription_catalog_text(language: str, plans: list[dict]) -> str:
 def build_plan_choice_keyboard(language: str, plans: list[dict]) -> InlineKeyboardMarkup:
     rows = []
     for plan in sort_plans_for_display(plans):
+        # Card-binding flow only: the button must open our bind page (payment_start_url).
+        # No fallback to the old merchant/pay/create checkout (pays.uz).
         payment_url = normalize_payment_url(plan.get("payment_start_url") or "")
         if payment_url:
             rows.append(
@@ -173,13 +175,10 @@ def build_plan_choice_keyboard(language: str, plans: list[dict]) -> InlineKeyboa
                 ]
             )
         else:
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        text=plan_button_label(language, plan, plans),
-                        callback_data=f"{PLAN_CALLBACK_PREFIX}{plan['id']}",
-                    )
-                ]
+            logger.error(
+                "No payment_start_url for plan id=%s — bind page link missing. "
+                "Check BOT_API_SECRET and ATMOS_CALLBACK_URL/BACKEND_BASE_URL.",
+                plan.get("id"),
             )
     rows.append([feedback_decline_button(language, "declined")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
