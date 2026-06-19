@@ -969,14 +969,18 @@ def start_card_binding(*, card_number, expiry):
     service = AtmosPaymentService()
     if not service.is_configured():
         return {"ok": False, "error": "Payment is not configured."}
+    logger.info("Atmos bind-card/init: requesting card link (masked card ****%s)", str(card_number)[-4:])
     try:
         raw = service.bind_card_init(card_number=card_number, expiry=expiry)
     except (OSError, URLError, ValueError) as exc:
+        logger.warning("Atmos bind-card/init failed: %s", service._format_request_error(exc))
         return {"ok": False, "error": service._format_request_error(exc)}
     api_error = service._extract_api_error(raw)
     transaction_id = raw.get("transaction_id")
     if api_error or not transaction_id:
+        logger.warning("Atmos bind-card/init rejected: error=%s raw=%s", api_error, raw)
         return {"ok": False, "error": api_error or "Card binding could not be started.", "raw": raw}
+    logger.info("Atmos bind-card/init OK: transaction_id=%s", transaction_id)
     return {
         "ok": True,
         "transaction_id": str(transaction_id),
@@ -990,15 +994,19 @@ def confirm_card_binding(*, user, transaction_id, otp):
     service = AtmosPaymentService()
     if not service.is_configured():
         return {"ok": False, "error": "Payment is not configured."}
+    logger.info("Atmos bind-card/confirm: transaction_id=%s", transaction_id)
     try:
         raw = service.bind_card_confirm(transaction_id=transaction_id, otp=otp)
     except (OSError, URLError, ValueError) as exc:
+        logger.warning("Atmos bind-card/confirm failed: %s", service._format_request_error(exc))
         return {"ok": False, "error": service._format_request_error(exc)}
     api_error = service._extract_api_error(raw)
     data = raw.get("data") or {}
     card_token = data.get("card_token")
     if api_error or not card_token:
+        logger.warning("Atmos bind-card/confirm rejected: error=%s raw=%s", api_error, raw)
         return {"ok": False, "error": api_error or "Card binding failed.", "raw": raw}
+    logger.info("Atmos bind-card/confirm OK: card_id=%s pan=%s", data.get("card_id"), data.get("pan"))
 
     with transaction.atomic():
         bound = BoundCard.objects.create(
@@ -1029,6 +1037,14 @@ def charge_subscription(*, user, plan, bound_card, is_auto_renewal=False):
     order.bound_card = bound_card
     order.is_auto_renewal = is_auto_renewal
     order.save(update_fields=("bound_card", "is_auto_renewal", "updated_at"))
+    logger.info(
+        "Atmos token charge: user=%s order=%s plan=%s auto=%s card_id=%s",
+        user.telegram_id,
+        order.merchant_order_id,
+        plan.id,
+        is_auto_renewal,
+        bound_card.card_id,
+    )
 
     if not order.atmos_transaction_id:
         error = ""
@@ -1104,12 +1120,21 @@ def remove_bound_card(user):
     )
     error = ""
     if card and service.is_configured():
+        logger.info(
+            "Atmos remove-card: user=%s card_id=%s", user.telegram_id, card.card_id
+        )
         try:
             raw = service.remove_card(card_id=card.card_id, card_token=card.card_token)
             error = service._extract_api_error(raw)
+            if error:
+                logger.warning("Atmos remove-card rejected user=%s: %s", user.telegram_id, error)
+            else:
+                logger.info("Atmos remove-card OK: user=%s card_id=%s", user.telegram_id, card.card_id)
         except (OSError, URLError, ValueError) as exc:
             error = service._format_request_error(exc)
             logger.warning("Atmos remove-card failed user=%s: %s", user.telegram_id, error)
+    elif not card:
+        logger.info("Cancel subscription: no active bound card for user=%s (nothing to remove)", user.telegram_id)
 
     if card:
         card.mark_removed()

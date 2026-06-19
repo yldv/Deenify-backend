@@ -70,17 +70,17 @@ async def show_subscription_status(message: Message, state: FSMContext, api_clie
         )
 
 
-@router.message(SettingsState.menu, F.text.in_(all_button_texts("settings_invite_friends")))
+@router.message(F.text.in_(all_button_texts("settings_invite_friends")))
 async def settings_invite_friends(message: Message, state: FSMContext, api_client):
     language = await get_language(state)
     try:
         data = await api_client.get_referral(telegram_id=message.from_user.id)
     except NotFoundError:
-        await message.answer(get_text(language, "not_found"), reply_markup=settings_keyboard(language))
+        await message.answer(get_text(language, "not_found"), reply_markup=home_keyboard(language))
         return
     except ApiClientError:
         logger.exception("Failed to load referral info telegram_id=%s", message.from_user.id)
-        await message.answer(get_text(language, "error"), reply_markup=settings_keyboard(language))
+        await message.answer(get_text(language, "error"), reply_markup=home_keyboard(language))
         return
 
     text = get_text(
@@ -92,7 +92,12 @@ async def settings_invite_friends(message: Message, state: FSMContext, api_clien
         monthly=data.get("bonus_days_monthly", 0),
         yearly=data.get("bonus_days_yearly", 0),
     )
-    await message.answer(text, reply_markup=settings_keyboard(language))
+    await message.answer(
+        text,
+        reply_markup=home_keyboard(language),
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
 
 
 @router.message(SettingsState.menu, F.text.in_(all_button_texts("settings_cancel_subscription")))
@@ -120,6 +125,7 @@ async def settings_cancel_subscription(message: Message, state: FSMContext, api_
         await message.answer(
             get_text(language, "cancel_done", until=until),
             reply_markup=settings_keyboard(language),
+            parse_mode="HTML",
         )
     else:
         await message.answer(
