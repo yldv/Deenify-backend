@@ -34,20 +34,34 @@ def phone_keyboard(language: str):
     )
 
 
-def home_keyboard(language: str, is_premium: bool = False):
-    # "Buy premium" only makes sense for users without an active subscription.
+def _home_keyboard_rows(language: str, is_premium: bool):
     second_row = []
     if not is_premium:
-        second_row.append(KeyboardButton(text=get_text(language, "buy_premium_button")))
-    second_row.append(KeyboardButton(text=get_text(language, "settings_invite_friends")))
+        second_row.append(get_text(language, "buy_premium_button"))
+    second_row.append(get_text(language, "settings_invite_friends"))
+    return [
+        [get_text(language, "take_test"), get_text(language, "restart_from_start")],
+        second_row,
+        [get_text(language, "settings")],
+    ]
+
+
+def home_keyboard_reply_dict(language: str, is_premium: bool = False) -> dict:
+    """Telegram sendMessage reply_markup dict (bot + backend notifications)."""
+    rows = _home_keyboard_rows(language, is_premium)
+    return {
+        "keyboard": [[{"text": label} for label in row] for row in rows],
+        "resize_keyboard": True,
+        "is_persistent": True,
+    }
+
+
+def home_keyboard(language: str, is_premium: bool = False):
+    # "Buy premium" only makes sense for users without an active subscription.
+    rows = _home_keyboard_rows(language, is_premium)
     return ReplyKeyboardMarkup(
         keyboard=[
-            [
-                KeyboardButton(text=get_text(language, "take_test")),
-                KeyboardButton(text=get_text(language, "restart_from_start")),
-            ],
-            second_row,
-            [KeyboardButton(text=get_text(language, "settings"))],
+            [KeyboardButton(text=label) for label in row] for row in rows
         ],
         resize_keyboard=True,
         is_persistent=True,

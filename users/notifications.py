@@ -77,24 +77,11 @@ def send_telegram_message(*, chat_id, text, parse_mode="HTML", reply_markup=None
     return bool(result and result.get("ok"))
 
 
-def _home_menu_markup(language: str) -> dict:
+def _home_menu_markup(language: str, *, is_premium: bool = True) -> dict:
     """Reply keyboard mirroring bot.keyboards.home_keyboard for backend-sent messages."""
-    from bot.texts import get_text
+    from bot.keyboards import home_keyboard_reply_dict
 
-    return {
-        "keyboard": [
-            [
-                {"text": get_text(language, "take_test")},
-                {"text": get_text(language, "restart_from_start")},
-            ],
-            [
-                {"text": get_text(language, "help")},
-                {"text": get_text(language, "settings")},
-            ],
-        ],
-        "resize_keyboard": True,
-        "is_persistent": True,
-    }
+    return home_keyboard_reply_dict(language, is_premium=is_premium)
 
 
 def _success_text(*, language: str, plan_name: str, until: str) -> str:
@@ -181,7 +168,7 @@ def notify_payment_success(order) -> None:
     send_telegram_message(
         chat_id=chat_id,
         text=_success_text(language=language, plan_name=plan_name, until=until),
-        reply_markup=_home_menu_markup(language),
+        reply_markup=_home_menu_markup(language, is_premium=True),
     )
 
 

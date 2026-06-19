@@ -277,6 +277,10 @@ ATMOS_REFERRAL_BONUS_DAYS_YEARLY = int(
 # and give up auto-renewal (notify the user) after this many days of failed retries.
 ATMOS_RENEW_LEAD_DAYS = int(os.environ.get('ATMOS_RENEW_LEAD_DAYS', '1'))
 ATMOS_RENEW_FAIL_GRACE_DAYS = int(os.environ.get('ATMOS_RENEW_FAIL_GRACE_DAYS', '3'))
+# Unpaid Atmos orders older than this are removed by cleanup_stale_atmos_orders (daily timer).
+ATMOS_STALE_ORDER_RETENTION_DAYS = int(
+    os.environ.get('ATMOS_STALE_ORDER_RETENTION_DAYS', '7')
+)
 
 # Quiz (Telegram bot round-based flow)
 DEENIFY_QUIZ_DEFAULT_CATEGORY_SLUG = os.environ.get('DEENIFY_QUIZ_DEFAULT_CATEGORY_SLUG', 'islam')
