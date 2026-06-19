@@ -164,6 +164,58 @@ sudo systemctl enable --now deenify-billing.timer
 sudo systemctl list-timers deenify-billing.timer   # проверить расписание
 ```
 
+### Очистка неоплаченных заказов (админка)
+
+Тестовые `created` / `pending` / `failed` заказы копятся в «To'lov buyurtmalari».
+Оплаченные (`paid`) **никогда не удаляются** автоматически.
+
+Ежедневная автоочистка (неоплаченные заказы старше 1 дня по умолчанию):
+
+```bash
+sudo cp deploy/systemd/deenify-cleanup-orders.service /etc/systemd/system/
+sudo cp deploy/systemd/deenify-cleanup-orders.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now deenify-cleanup-orders.timer
+```
+
+Перед prod — разовая зачистка всего мусора (сначала dry-run):
+
+```bash
+cd /var/www/deenify
+source .venv/bin/activate
+python manage.py cleanup_stale_atmos_orders --all-unpaid --dry-run
+python manage.py cleanup_stale_atmos_orders --all-unpaid
+```
+
+В админке: выделить заказы → action **«Delete selected unpaid orders»**.
+
+Переменная `.env`: `ATMOS_STALE_ORDER_RETENTION_DAYS=1`
+
+### Автоудаление каталога тарифов в Telegram (если не купил)
+
+Сообщение «⭐ Deenify Premium … 👇 Tarifni tanlang» удаляется из чата через **1 час**,
+если оплата не прошла (ссылки на оплату тоже живут ~1 час). При успешной оплате
+сообщение удаляется сразу, как и раньше.
+
+```bash
+sudo cp deploy/systemd/deenify-cleanup-offers.service /etc/systemd/system/
+sudo cp deploy/systemd/deenify-cleanup-offers.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now deenify-cleanup-offers.timer
+sudo systemctl list-timers deenify-cleanup-offers.timer
+```
+
+Проверка вручную:
+
+```bash
+python manage.py cleanup_expired_offer_messages --dry-run
+```
+
+`.env`: `OFFER_MESSAGE_TTL_SECONDS=3600` (1 час)
+
+> **Нужно ли дропать всю БД перед prod?** Обычно **нет**. Достаточно удалить неоплаченные заказы командой выше.
+> Полный сброс (`DROP DATABASE` / `flush`) — только если **все** пользователи и подписки тестовые и их можно потерять.
+
 Проверка вручную (без списания — только список должников):
 
 ```bash
@@ -283,6 +335,17 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py collectstatic --noinput
 sudo systemctl restart deenify-web deenify-bot
+```
+
+При первом деплое cleanup timer (если ещё не включён):
+
+```bash
+sudo cp deploy/systemd/deenify-cleanup-orders.service /etc/systemd/system/
+sudo cp deploy/systemd/deenify-cleanup-orders.timer /etc/systemd/system/
+sudo cp deploy/systemd/deenify-cleanup-offers.service /etc/systemd/system/
+sudo cp deploy/systemd/deenify-cleanup-offers.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now deenify-cleanup-orders.timer deenify-cleanup-offers.timer
 ```
 
 ---

@@ -279,8 +279,10 @@ ATMOS_RENEW_LEAD_DAYS = int(os.environ.get('ATMOS_RENEW_LEAD_DAYS', '1'))
 ATMOS_RENEW_FAIL_GRACE_DAYS = int(os.environ.get('ATMOS_RENEW_FAIL_GRACE_DAYS', '3'))
 # Unpaid Atmos orders older than this are removed by cleanup_stale_atmos_orders (daily timer).
 ATMOS_STALE_ORDER_RETENTION_DAYS = int(
-    os.environ.get('ATMOS_STALE_ORDER_RETENTION_DAYS', '7')
+    os.environ.get('ATMOS_STALE_ORDER_RETENTION_DAYS', '1')
 )
+# Delete unpaid subscription catalog messages after this many seconds (matches payment link TTL).
+OFFER_MESSAGE_TTL_SECONDS = int(os.environ.get('OFFER_MESSAGE_TTL_SECONDS', '3600'))
 
 # Quiz (Telegram bot round-based flow)
 DEENIFY_QUIZ_DEFAULT_CATEGORY_SLUG = os.environ.get('DEENIFY_QUIZ_DEFAULT_CATEGORY_SLUG', 'islam')

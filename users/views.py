@@ -4,7 +4,7 @@ from django.conf import settings
 from django.http import HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import redirect, render
 from django.urls import reverse
-from django.utils import translation
+from django.utils import timezone, translation
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
@@ -139,11 +139,14 @@ class BotUserOfferMessageView(BotProtectedAPIView):
         user.offer_message_id = serializer.validated_data.get("message_id")
         user.offer_chat_id = serializer.validated_data.get("chat_id")
         user.offer_prompt_message_id = serializer.validated_data.get("prompt_message_id")
+        if user.offer_message_id and user.offer_chat_id:
+            user.offer_sent_at = timezone.now()
         user.save(
             update_fields=(
                 "offer_message_id",
                 "offer_chat_id",
                 "offer_prompt_message_id",
+                "offer_sent_at",
                 "updated_at",
             )
         )

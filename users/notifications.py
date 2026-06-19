@@ -77,6 +77,39 @@ def send_telegram_message(*, chat_id, text, parse_mode="HTML", reply_markup=None
     return bool(result and result.get("ok"))
 
 
+def clear_offer_telegram_messages(user, *, save: bool = True) -> bool:
+    """Delete stored subscription catalog (and prompt) messages from the user's chat."""
+    if not user.offer_chat_id or not (
+        user.offer_message_id or user.offer_prompt_message_id
+    ):
+        return False
+    for message_id in (user.offer_message_id, user.offer_prompt_message_id):
+        if message_id:
+            delete_telegram_message(chat_id=user.offer_chat_id, message_id=message_id)
+    user.offer_message_id = None
+    user.offer_prompt_message_id = None
+    user.offer_chat_id = None
+    user.offer_sent_at = None
+    if save:
+        try:
+            user.save(
+                update_fields=(
+                    "offer_message_id",
+                    "offer_prompt_message_id",
+                    "offer_chat_id",
+                    "offer_sent_at",
+                    "updated_at",
+                )
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "Failed to clear offer message refs for user=%s",
+                getattr(user, "telegram_id", None),
+            )
+            return False
+    return True
+
+
 def _home_menu_markup(language: str, *, is_premium: bool = True) -> dict:
     """Reply keyboard mirroring bot.keyboards.home_keyboard for backend-sent messages."""
     from bot.keyboards import home_keyboard_reply_dict
@@ -142,25 +175,7 @@ def notify_payment_success(order) -> None:
     chat_id = user.telegram_id
 
     if user.offer_chat_id and (user.offer_message_id or user.offer_prompt_message_id):
-        for message_id in (user.offer_message_id, user.offer_prompt_message_id):
-            if message_id:
-                delete_telegram_message(
-                    chat_id=user.offer_chat_id, message_id=message_id
-                )
-        user.offer_message_id = None
-        user.offer_prompt_message_id = None
-        user.offer_chat_id = None
-        try:
-            user.save(
-                update_fields=(
-                    "offer_message_id",
-                    "offer_prompt_message_id",
-                    "offer_chat_id",
-                    "updated_at",
-                )
-            )
-        except Exception:  # noqa: BLE001
-            logger.exception("Failed to clear offer message for user=%s", chat_id)
+        clear_offer_telegram_messages(user)
 
     subscription = getattr(order, "premium_subscription", None)
     plan_name = _localized_plan_name(order.plan, language)

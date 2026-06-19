@@ -65,6 +65,12 @@ class TelegramUser(TimeStampedModel):
         blank=True,
         help_text=_("Telegram message id of the 'subscription required' lead-in message."),
     )
+    offer_sent_at = models.DateTimeField(
+        _("offer sent at"),
+        null=True,
+        blank=True,
+        help_text=_("When the subscription catalog was last sent (for auto-delete after TTL)."),
+    )
     referred_by = models.ForeignKey(
         "self",
         on_delete=models.SET_NULL,

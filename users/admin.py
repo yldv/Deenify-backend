@@ -186,6 +186,17 @@ class AtmosTransactionInline(admin.TabularInline):
     can_delete = False
 
 
+@admin.action(description="Delete selected unpaid orders (and their transactions)")
+def delete_unpaid_atmos_orders(modeladmin, request, queryset):
+    unpaid = queryset.exclude(status=AtmosOrder.Status.PAID)
+    count = unpaid.count()
+    if not count:
+        modeladmin.message_user(request, "No unpaid orders in selection.", level="warning")
+        return
+    unpaid.delete()
+    modeladmin.message_user(request, f"Deleted {count} unpaid order(s).")
+
+
 @admin.register(AtmosOrder)
 class AtmosOrderAdmin(admin.ModelAdmin):
     list_display = (
@@ -217,6 +228,7 @@ class AtmosOrderAdmin(admin.ModelAdmin):
     )
     autocomplete_fields = ("user", "plan", "bound_card")
     inlines = (AtmosTransactionInline,)
+    actions = (delete_unpaid_atmos_orders,)
 
 
 @admin.register(AtmosTransaction)

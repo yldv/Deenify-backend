@@ -1452,6 +1452,71 @@ def process_atmos_callback(payload):
     }
 
 
+def cleanup_stale_atmos_orders(*, days=None, all_unpaid=False, dry_run=False):
+    """Remove unpaid Atmos orders (and their transactions) to keep the admin tidy.
+
+    Paid orders are never deleted. By default only orders older than
+    ``ATMOS_STALE_ORDER_RETENTION_DAYS`` are removed.
+    """
+    from datetime import timedelta
+
+    retention_days = (
+        settings.ATMOS_STALE_ORDER_RETENTION_DAYS if days is None else days
+    )
+    unpaid_statuses = (
+        AtmosOrder.Status.CREATED,
+        AtmosOrder.Status.PENDING,
+        AtmosOrder.Status.FAILED,
+        AtmosOrder.Status.CANCELED,
+        AtmosOrder.Status.EXPIRED,
+    )
+    qs = AtmosOrder.objects.filter(status__in=unpaid_statuses)
+    if not all_unpaid:
+        cutoff = timezone.now() - timedelta(days=retention_days)
+        qs = qs.filter(created_at__lt=cutoff)
+
+    order_count = qs.count()
+    if dry_run:
+        return {
+            "orders": order_count,
+            "transactions": AtmosTransaction.objects.filter(order__in=qs).count(),
+            "dry_run": True,
+        }
+
+    deleted_total, breakdown = qs.delete()
+    return {
+        "orders": breakdown.get("users.AtmosOrder", 0),
+        "transactions": breakdown.get("users.AtmosTransaction", 0),
+        "deleted_total": deleted_total,
+        "dry_run": False,
+    }
+
+
+def cleanup_expired_offer_messages(*, ttl_seconds=None, dry_run=False):
+    """Delete subscription catalog Telegram messages that were not paid in time."""
+    from datetime import timedelta
+
+    from .notifications import clear_offer_telegram_messages
+
+    ttl = settings.OFFER_MESSAGE_TTL_SECONDS if ttl_seconds is None else ttl_seconds
+    cutoff = timezone.now() - timedelta(seconds=ttl)
+    users = TelegramUser.objects.filter(
+        offer_message_id__isnull=False,
+        offer_chat_id__isnull=False,
+        offer_sent_at__isnull=False,
+        offer_sent_at__lt=cutoff,
+    )
+    total = users.count()
+    if dry_run:
+        return {"users": total, "dry_run": True}
+
+    cleared = 0
+    for user in users.iterator():
+        if clear_offer_telegram_messages(user):
+            cleared += 1
+    return {"users": total, "cleared": cleared, "dry_run": False}
+
+
 def get_admin_statistics():
     now = timezone.now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
