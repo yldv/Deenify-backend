@@ -75,16 +75,13 @@ TEXTS = {
             "/restart — Testni boshidan boshlash (0 dan)\n"
             "/settings — Sozlamalar\n"
             "/help — Yordam\n\n"
-            "Quyidan yordam turini tanlang. Agar javob topilmasa, operator bilan bog'laning."
+            "Quyidan xabar jo'nating — operator javob beradi."
         ),
-        "help_phone": "📞 Telefon orqali bog'lanish",
         "help_message": "📬 Xabar jo'natish",
-        "help_phone_number": "Bizning raqam: {phone}",
-        "help_phone_missing": "Operator raqami hozircha sozlanmagan.",
         "help_message_prompt": "Bizga o'z xabaringizni jo'nating:",
         "help_message_empty": "❌ Xabar yozing.",
         "help_message_sent": "✅ Xabaringiz yuborildi.",
-        "help_message_failed": "❌ Xabar operatorga yetmadi. Telefon orqali bog'laning.",
+        "help_message_failed": "❌ Xabar operatorga yetmadi. Keyinroq qayta urinib ko'ring.",
         "help_message_no_admins": "❌ Operator hozircha sozlanmagan.",
         "help_cancel": "Bekor qilish",
         "quiz_no_questions": "Hozircha savollar topilmadi.",
@@ -248,16 +245,13 @@ TEXTS = {
             "/restart — Тестни бошидан бошлаш (0 дан)\n"
             "/settings — Созламалар\n"
             "/help — Ёрдам\n\n"
-            "Қуйида ёрдам турини танланг. Агар жавоб топилмаса, оператор билан боғланинг."
+            "Қуйида хabar жўнатинг — оператор жавоб беради."
         ),
-        "help_phone": "📞 Телефон орқали боғланиш",
         "help_message": "📬 Хабар жўнатиш",
-        "help_phone_number": "Бизнинг рақам: {phone}",
-        "help_phone_missing": "Оператор рақами ҳозирча созланмаган.",
         "help_message_prompt": "Бизга ўз хабарингизни жўнатинг:",
         "help_message_empty": "❌ Хабар ёзинг.",
         "help_message_sent": "✅ Хабарингиз юборилди.",
-        "help_message_failed": "❌ Хabar операторга yetmadi. Телефон орқали bog'laning.",
+        "help_message_failed": "❌ Хabar operatorga yetmadi. Keyinroq qayta urinib ko'ring.",
         "help_message_no_admins": "❌ Оператор ҳозирча созланмаган.",
         "help_cancel": "Бекор қилиш",
         "quiz_no_questions": "Ҳозирча саволлар топилмади.",
@@ -422,16 +416,13 @@ TEXTS = {
             "/restart — Начать тест с нуля\n"
             "/settings — Настройки\n"
             "/help — Помощь\n\n"
-            "Ниже выберите тип помощи. Если не найдёте ответ, свяжитесь с оператором."
+            "Ниже отправьте сообщение — оператор ответит."
         ),
-        "help_phone": "📞 Связаться по телефону",
         "help_message": "📬 Отправить сообщение",
-        "help_phone_number": "Наш номер: {phone}",
-        "help_phone_missing": "Номер оператора пока не настроен.",
         "help_message_prompt": "Отправьте нам ваше сообщение:",
         "help_message_empty": "❌ Напишите сообщение.",
         "help_message_sent": "✅ Ваше сообщение отправлено.",
-        "help_message_failed": "❌ Сообщение не доставлено оператору. Позвоните по телефону.",
+        "help_message_failed": "❌ Сообщение не доставлено оператору. Попробуйте позже.",
         "help_message_no_admins": "❌ Оператор пока не настроен.",
         "help_cancel": "Отмена",
         "quiz_no_questions": "Вопросы пока не найдены.",

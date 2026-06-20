@@ -10,3 +10,4 @@ WorkingDirectory=/var/www/deenify
 EnvironmentFile=/var/www/deenify/.env
 ExecStart=/var/www/deenify/.venv/bin/python manage.py cleanup_stale_atmos_orders
 
+ 

@@ -25,21 +25,6 @@ async def open_help(message: Message, state: FSMContext):
     )
 
 
-@router.message(HelpState.menu, F.text.in_(all_button_texts("help_phone")))
-async def help_phone(message: Message, state: FSMContext, bot_config: BotConfig):
-    language = await get_language(state)
-    if bot_config.support_phone:
-        await message.answer(
-            get_text(language, "help_phone_number", phone=bot_config.support_phone),
-            reply_markup=help_keyboard(language),
-        )
-        return
-    await message.answer(
-        get_text(language, "help_phone_missing"),
-        reply_markup=help_keyboard(language),
-    )
-
-
 @router.message(HelpState.menu, F.text.in_(all_button_texts("help_message")))
 async def help_message_start(message: Message, state: FSMContext):
     language = await get_language(state)

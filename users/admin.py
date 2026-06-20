@@ -35,7 +35,7 @@ class TelegramUserAdminBase(admin.ModelAdmin):
     readonly_fields = ("created_at", "updated_at", "last_seen_at")
     fieldsets = (
         (
-            "Telegram",
+            "Telegram profil",
             {"fields": ("telegram_id", "username", "full_name", "first_name", "last_name", "language")},
         ),
         ("Aloqa", {"fields": ("phone_number",)}),
@@ -49,7 +49,7 @@ class TelegramUserAdminBase(admin.ModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).prefetch_related("premium_subscriptions__plan")
 
-    @admin.display(boolean=True, description="Premium")
+    @admin.display(boolean=True, description="Premium faol")
     def has_active_premium(self, obj):
         return obj.has_active_premium()
 
@@ -150,12 +150,29 @@ class UserPremiumSubscriptionAdmin(admin.ModelAdmin):
 
 @admin.register(BoundCard)
 class BoundCardAdmin(admin.ModelAdmin):
-    list_display = ("user", "masked_pan", "card_id", "expiry", "is_active", "created_at", "removed_at")
+    list_display = ("user", "masked_pan", "card_id", "expiry", "card_status", "created_at", "removed_at")
     list_filter = ("is_active", "created_at")
     search_fields = ("user__telegram_id", "user__username", "card_id", "masked_pan")
     readonly_fields = ("created_at", "updated_at", "removed_at", "card_token")
     autocomplete_fields = ("user",)
     ordering = ("-created_at",)
+    actions = ("delete_inactive_cards",)
+
+    @admin.display(description="Holat", ordering="is_active")
+    def card_status(self, obj):
+        return "Faol" if obj.is_active else "Uzilgan"
+
+    @admin.action(description="Tanlangan uzilgan kartalarni o'chirish")
+    def delete_inactive_cards(modeladmin, request, queryset):
+        inactive = queryset.filter(is_active=False)
+        count = inactive.count()
+        if not count:
+            modeladmin.message_user(
+                request, "Tanlovda uzilgan kartalar yo'q.", level="warning"
+            )
+            return
+        inactive.delete()
+        modeladmin.message_user(request, f"{count} ta uzilgan karta o'chirildi.")
 
 
 @admin.register(Feedback)
@@ -167,7 +184,7 @@ class FeedbackAdmin(admin.ModelAdmin):
     autocomplete_fields = ("user",)
     ordering = ("-created_at",)
 
-    @admin.display(description="Text")
+    @admin.display(description="Matn")
     def short_text(self, obj):
         return (obj.text[:60] + "…") if len(obj.text or "") > 60 else (obj.text or "")
 
@@ -186,15 +203,17 @@ class AtmosTransactionInline(admin.TabularInline):
     can_delete = False
 
 
-@admin.action(description="Delete selected unpaid orders (and their transactions)")
+@admin.action(description="Tanlangan to'lanmagan buyurtmalarni o'chirish")
 def delete_unpaid_atmos_orders(modeladmin, request, queryset):
     unpaid = queryset.exclude(status=AtmosOrder.Status.PAID)
     count = unpaid.count()
     if not count:
-        modeladmin.message_user(request, "No unpaid orders in selection.", level="warning")
+        modeladmin.message_user(
+            request, "Tanlovda to'lanmagan buyurtmalar yo'q.", level="warning"
+        )
         return
     unpaid.delete()
-    modeladmin.message_user(request, f"Deleted {count} unpaid order(s).")
+    modeladmin.message_user(request, f"{count} ta to'lanmagan buyurtma o'chirildi.")
 
 
 @admin.register(AtmosOrder)

@@ -120,7 +120,6 @@ def feedback_reasons_keyboard(language: str, context: str) -> InlineKeyboardMark
 def help_keyboard(language: str):
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=get_text(language, "help_phone"))],
             [KeyboardButton(text=get_text(language, "help_message"))],
             [KeyboardButton(text=get_text(language, "back"))],
         ],

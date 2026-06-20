@@ -29,6 +29,8 @@ JAZZMIN_SETTINGS = {
         "users.ActiveTelegramUser": "fas fa-user-check",
         "users.SubscriptionPlan": "fas fa-gem",
         "users.UserPremiumSubscription": "fas fa-star",
+        "users.BoundCard": "fas fa-credit-card",
+        "users.Feedback": "fas fa-comment-dots",
         "users.AtmosOrder": "fas fa-receipt",
         "users.AtmosTransaction": "fas fa-exchange-alt",
         "tests.Test": "fas fa-book-quran",
