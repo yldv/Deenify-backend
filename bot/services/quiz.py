@@ -32,12 +32,10 @@ def clip_text(text: str, limit: int) -> str:
     return value[: limit - 1] + "…"
 
 
-def build_poll_explanation(description: str, explanation: str = "") -> str | None:
-    """Poll explanation: Telegram shows it on wrong answers (or via lamp icon)."""
-    parts = [p.strip() for p in (description, explanation) if (p or "").strip()]
-    if not parts:
-        return None
-    return clip_text("\n".join(parts), POLL_EXPLANATION_LIMIT)
+def build_poll_explanation(description: str) -> str | None:
+    """Poll explanation: manba only; Telegram shows it on wrong answers."""
+    source = (description or "").strip()
+    return clip_text(source, POLL_EXPLANATION_LIMIT) if source else None
 
 
 def quiz_reply_keyboard(language: str, *, is_premium: bool = False):
@@ -142,10 +140,7 @@ class QuizMessenger:
             type=PollType.QUIZ,
             correct_option_id=int(question.get("correct_option_index", 0)),
             is_anonymous=False,
-            explanation=build_poll_explanation(
-                question.get("description", ""),
-                question.get("explanation", ""),
-            ),
+            explanation=build_poll_explanation(question.get("description", "")),
             reply_markup=keyboard,
         )
 
