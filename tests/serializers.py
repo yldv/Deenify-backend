@@ -14,11 +14,12 @@ class BotQuizAnswerSerializer(serializers.ModelSerializer):
 class BotQuizQuestionSerializer(serializers.ModelSerializer):
     answers = BotQuizAnswerSerializer(many=True, read_only=True)
     description = serializers.CharField(read_only=True)
+    explanation = serializers.CharField(read_only=True)
     correct_option_index = serializers.SerializerMethodField()
 
     class Meta:
         model = Test
-        fields = ("id", "question", "answers", "description", "correct_option_index")
+        fields = ("id", "question", "answers", "description", "explanation", "correct_option_index")
 
     def get_correct_option_index(self, obj):
         for index, answer in enumerate(obj.answers.all()):

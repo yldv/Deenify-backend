@@ -5,7 +5,11 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 
 from tests.models import Answer, Test, TestCategory, UserAnsweredTest
-from tests.services.quiz_import import import_questions_from_payload, parse_json_payload
+from tests.services.quiz_import import (
+    find_duplicate_question,
+    import_questions_from_payload,
+    parse_json_payload,
+)
 
 TRANSLATED_TEST_FIELDS = ("title", "question", "description", "explanation")
 
@@ -89,6 +93,18 @@ class TestAdmin(admin.ModelAdmin):
             uz_value = getattr(obj, f"{field}_uz", None) or ""
             if uz_value and not getattr(obj, field, None):
                 setattr(obj, field, uz_value)
+        question_payload = {
+            "uz": (obj.question_uz or obj.question or "").strip(),
+            "ru": (obj.question_ru or "").strip(),
+        }
+        duplicate = find_duplicate_question(
+            obj.category, question_payload, exclude_pk=obj.pk if change else None
+        )
+        if duplicate:
+            raise ValidationError(
+                f"Bu savol allaqachon mavjud (ID {duplicate.pk}, "
+                f"tartib {duplicate.sort_order})."
+            )
         super().save_model(request, obj, form, change)
 
     def save_formset(self, request, form, formset, change):
@@ -139,7 +155,12 @@ class TestAdmin(admin.ModelAdmin):
                 messages.success(
                     request,
                     f"Muvaffaqiyatli: {result['imported']} ta savol yuklandi. "
-                    f"Jami faol savollar: {result['active_questions']}.",
+                    f"Jami faol savollar: {result['active_questions']}."
+                    + (
+                        f" Takrorlangan savollar o'tkazib yuborildi: {result['skipped_duplicates']}."
+                        if result.get("skipped_duplicates")
+                        else ""
+                    ),
                 )
                 return redirect("admin:tests_test_changelist")
             except ValidationError as exc:

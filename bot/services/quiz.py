@@ -3,12 +3,12 @@ from aiogram.enums import PollType
 from aiogram.fsm.context import FSMContext
 
 from bot.api_client import ApiClientError, BlockedUserError, NotFoundError, PaymentRequiredError
-from bot.keyboards import home_keyboard
+from bot.keyboards import home_keyboard  # used by quiz_reply_keyboard
 from bot.services.payment import send_subscription_offers
 from bot.poll_sessions import remember_poll
 from bot.states import TakingTest
 from bot.texts import get_text
-from bot.uz_cyrillic import localize_quiz_content
+from bot.uz_cyrillic import localize_quiz_content, localize_text
 from core.constants import API_ROUND_COMPLETE
 
 POLL_QUESTION_LIMIT = 300
@@ -32,10 +32,17 @@ def clip_text(text: str, limit: int) -> str:
     return value[: limit - 1] + "…"
 
 
-def build_poll_explanation(description: str) -> str | None:
-    """Poll explanation (lamp / after answer): Manba only — uz/uz_cy/ru from API."""
-    source = (description or "").strip()
-    return clip_text(source, POLL_EXPLANATION_LIMIT) if source else None
+def build_poll_explanation(description: str, explanation: str = "") -> str | None:
+    """Poll explanation (lamp): manba + tushuntirish, Telegram shows mainly on wrong answers."""
+    parts = [p.strip() for p in (description, explanation) if (p or "").strip()]
+    if not parts:
+        return None
+    return clip_text("\n".join(parts), POLL_EXPLANATION_LIMIT)
+
+
+def quiz_reply_keyboard(language: str, *, is_premium: bool = False):
+    """Home menu keyboard — keep visible during the quiz flow."""
+    return home_keyboard(language, is_premium=is_premium)
 
 
 class QuizMessenger:
@@ -50,6 +57,7 @@ class QuizMessenger:
         state: FSMContext,
         language: str,
         exc: Exception,
+        is_premium: bool = False,
     ) -> bool:
         if isinstance(exc, PaymentRequiredError):
             free_limit = 10
@@ -59,7 +67,7 @@ class QuizMessenger:
             prompt_message = await bot.send_message(
                 chat_id,
                 get_text(language, "quiz_subscription_required", free_limit=free_limit),
-                reply_markup=home_keyboard(language),
+                reply_markup=quiz_reply_keyboard(language, is_premium=is_premium),
             )
             await send_subscription_offers(
                 bot=bot,
@@ -75,7 +83,7 @@ class QuizMessenger:
             await bot.send_message(
                 chat_id,
                 get_text(language, "blocked"),
-                reply_markup=home_keyboard(language),
+                reply_markup=quiz_reply_keyboard(language, is_premium=is_premium),
             )
             return False
         if isinstance(exc, NotFoundError):
@@ -83,7 +91,7 @@ class QuizMessenger:
             await bot.send_message(
                 chat_id,
                 get_text(language, "not_found"),
-                reply_markup=home_keyboard(language),
+                reply_markup=quiz_reply_keyboard(language, is_premium=is_premium),
             )
             return False
         if isinstance(exc, ApiClientError):
@@ -91,7 +99,7 @@ class QuizMessenger:
             await bot.send_message(
                 chat_id,
                 get_text(language, "error"),
-                reply_markup=home_keyboard(language),
+                reply_markup=quiz_reply_keyboard(language, is_premium=is_premium),
             )
             return False
         raise exc
@@ -108,17 +116,23 @@ class QuizMessenger:
         telegram_id: int,
     ) -> bool:
         question = localize_quiz_content(question, language)
+        is_premium = bool(progress.get("is_premium"))
+        keyboard = quiz_reply_keyboard(language, is_premium=is_premium)
         answers = question.get("answers", [])
         if not answers:
             await state.clear()
             await bot.send_message(
                 chat_id,
                 get_text(language, "quiz_no_questions"),
-                reply_markup=home_keyboard(language),
+                reply_markup=keyboard,
             )
             return False
 
-        await bot.send_message(chat_id, format_progress_header(language, progress))
+        await bot.send_message(
+            chat_id,
+            format_progress_header(language, progress),
+            reply_markup=keyboard,
+        )
 
         # is_anonymous=False is required: Telegram does not send poll_answer for anonymous polls.
         poll_message = await bot.send_poll(
@@ -128,7 +142,11 @@ class QuizMessenger:
             type=PollType.QUIZ,
             correct_option_id=int(question.get("correct_option_index", 0)),
             is_anonymous=False,
-            explanation=build_poll_explanation(question.get("description", "")),
+            explanation=build_poll_explanation(
+                question.get("description", ""),
+                question.get("explanation", ""),
+            ),
+            reply_markup=keyboard,
         )
 
         poll_id = str(poll_message.poll.id)
@@ -145,6 +163,7 @@ class QuizMessenger:
             active_poll_id=poll_id,
             language=language,
             telegram_id=telegram_id,
+            is_premium=is_premium,
         )
         return True
 
@@ -161,13 +180,20 @@ class QuizMessenger:
         try:
             data = await self.api.get_quiz_next(telegram_id=telegram_id, language=language)
         except (PaymentRequiredError, BlockedUserError, NotFoundError, ApiClientError) as exc:
+            is_premium = False
+            if isinstance(exc, PaymentRequiredError) and isinstance(exc.payload, dict):
+                is_premium = bool(exc.payload.get("progress", {}).get("is_premium"))
             return await self._send_api_error(
                 bot=bot,
                 chat_id=chat_id,
                 state=state,
                 language=language,
                 exc=exc,
+                is_premium=is_premium,
             )
+
+        progress = data.get("progress") or {}
+        is_premium = bool(progress.get("is_premium"))
 
         if data.get("code") == API_ROUND_COMPLETE:
             if restart_if_complete:
@@ -184,7 +210,7 @@ class QuizMessenger:
             await bot.send_message(
                 chat_id,
                 get_text(language, "quiz_round_complete"),
-                reply_markup=home_keyboard(language),
+                reply_markup=quiz_reply_keyboard(language, is_premium=is_premium),
             )
             return False
 
@@ -194,7 +220,7 @@ class QuizMessenger:
             await bot.send_message(
                 chat_id,
                 get_text(language, "quiz_no_questions"),
-                reply_markup=home_keyboard(language),
+                reply_markup=quiz_reply_keyboard(language, is_premium=is_premium),
             )
             return False
 
@@ -203,7 +229,7 @@ class QuizMessenger:
             chat_id=chat_id,
             state=state,
             question=question,
-            progress=data.get("progress", {}),
+            progress=progress,
             language=language,
             telegram_id=telegram_id,
         )
@@ -233,7 +259,7 @@ class QuizMessenger:
         await bot.send_message(
             chat_id,
             get_text(language, "quiz_reset_hint"),
-            reply_markup=home_keyboard(language),
+            reply_markup=quiz_reply_keyboard(language),
         )
         if not start_question:
             return True
@@ -266,12 +292,30 @@ class QuizMessenger:
                 language=language,
             )
         except (PaymentRequiredError, BlockedUserError, NotFoundError, ApiClientError) as exc:
+            state_data = await state.get_data()
+            is_premium = bool(state_data.get("is_premium"))
+            if isinstance(exc, PaymentRequiredError) and isinstance(exc.payload, dict):
+                is_premium = bool(exc.payload.get("progress", {}).get("is_premium"))
             return await self._send_api_error(
                 bot=bot,
                 chat_id=chat_id,
                 state=state,
                 language=language,
                 exc=exc,
+                is_premium=is_premium,
+            )
+
+        is_premium = bool(result.get("progress", {}).get("is_premium"))
+        keyboard = quiz_reply_keyboard(language, is_premium=is_premium)
+        outcome_key = "quiz_correct" if result.get("is_correct") else "quiz_wrong"
+        await bot.send_message(chat_id, get_text(language, outcome_key), reply_markup=keyboard)
+
+        explanation = localize_text((result.get("explanation") or "").strip(), language)
+        if explanation:
+            await bot.send_message(
+                chat_id,
+                get_text(language, "quiz_hint", text=explanation),
+                reply_markup=keyboard,
             )
 
         if result.get("is_round_complete"):
@@ -279,7 +323,7 @@ class QuizMessenger:
             await bot.send_message(
                 chat_id,
                 get_text(language, "quiz_round_complete"),
-                reply_markup=home_keyboard(language),
+                reply_markup=keyboard,
             )
             return False
 

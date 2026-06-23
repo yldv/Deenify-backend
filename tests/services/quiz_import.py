@@ -3,6 +3,7 @@ from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 
 from tests.models import Answer, Test, TestCategory
 
@@ -119,6 +120,24 @@ def get_or_create_category(slug: str | None) -> TestCategory:
     return category
 
 
+def find_duplicate_question(category: TestCategory, question: dict, *, exclude_pk=None) -> Test | None:
+    """Return an existing test with the same question text (uz or ru) in this category."""
+    uz = (question.get("uz") or "").strip()
+    ru = (question.get("ru") or "").strip()
+    if not uz and not ru:
+        return None
+    qs = Test.objects.filter(category=category)
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+    if uz:
+        match = qs.filter(Q(question_uz=uz) | Q(question=uz)).first()
+        if match:
+            return match
+    if ru:
+        return qs.filter(question_ru=ru).first()
+    return None
+
+
 def upsert_test(category: TestCategory, item: dict) -> Test:
     defaults = {
         "category": category,
@@ -182,16 +201,24 @@ def import_questions_from_payload(
         raise ValidationError("Savollar ro'yxati bo'sh.")
 
     imported = 0
+    skipped_duplicates = 0
     for index, raw_item in enumerate(questions_raw, start=1):
         item = normalize_question(raw_item, index)
         if not item["question"].get("uz") and not item["question"].get("ru"):
             raise ValidationError(f"{index}-savol: savol matni bo'sh.")
+        duplicate = find_duplicate_question(category, item["question"])
+        if duplicate and not (
+            duplicate.level == item["level"] and duplicate.sort_order == item["sort_order"]
+        ):
+            skipped_duplicates += 1
+            continue
         upsert_test(category, item)
         imported += 1
 
     active_count = Test.objects.filter(category=category, is_active=True).count()
     return {
         "imported": imported,
+        "skipped_duplicates": skipped_duplicates,
         "category": category.slug,
         "active_questions": active_count,
     }

@@ -87,6 +87,7 @@ TEXTS = {
         "quiz_no_questions": "Hozircha savollar topilmadi.",
         "quiz_correct": "✅ To'g'ri!",
         "quiz_wrong": "❌ Noto'g'ri.",
+        "quiz_hint": "💡 {text}",
         "quiz_progress": "📊 O'tilgan: {answered}/{total}",
         "quiz_round_complete": (
             "🎉 Tabriklaymiz! Siz barcha savollarni tugatdingiz.\n"
@@ -257,6 +258,7 @@ TEXTS = {
         "quiz_no_questions": "Ҳозирча саволлар топилмади.",
         "quiz_correct": "✅ Тўғри!",
         "quiz_wrong": "❌ Нотўғри.",
+        "quiz_hint": "💡 {text}",
         "quiz_progress": "📊 Ўтилган: {answered}/{total}",
         "quiz_round_complete": (
             "🎉 Табриклаймиз! Сиз барча саволларни тугатдингиз.\n"
@@ -428,6 +430,7 @@ TEXTS = {
         "quiz_no_questions": "Вопросы пока не найдены.",
         "quiz_correct": "✅ Правильно!",
         "quiz_wrong": "❌ Неправильно.",
+        "quiz_hint": "💡 {text}",
         "quiz_progress": "📊 Прогресс: {answered}/{total}",
         "quiz_round_complete": (
             "🎉 Поздравляем! Вы завершили все вопросы.\n"

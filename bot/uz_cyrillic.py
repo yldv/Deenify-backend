@@ -93,6 +93,8 @@ def localize_quiz_content(question: dict, language: str) -> dict:
     localized["question"] = latin_to_cyrillic(question.get("question", ""))
     if question.get("description"):
         localized["description"] = latin_to_cyrillic(question.get("description", ""))
+    if question.get("explanation"):
+        localized["explanation"] = latin_to_cyrillic(question.get("explanation", ""))
     localized["answers"] = [
         {
             "id": answer["id"],

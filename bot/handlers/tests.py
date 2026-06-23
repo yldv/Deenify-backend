@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, PollAnswer
 
 from bot.context import get_language
+from bot.handlers.common import resolve_is_premium
 from bot.keyboards import home_keyboard
 from bot.poll_sessions import forget_poll, get_poll_session
 from bot.services.quiz import QuizMessenger
@@ -85,10 +86,11 @@ async def poll_answer_handler(poll_answer: PollAnswer, state: FSMContext, api_cl
             language = normalize_language(data.get("language", "uz"))
             chat_id = poll_answer.user.id if poll_answer.user else None
             if chat_id:
+                is_premium = await resolve_is_premium(api_client, chat_id)
                 await bot.send_message(
                     chat_id,
                     get_text(language, "quiz_session_expired"),
-                    reply_markup=home_keyboard(language),
+                    reply_markup=home_keyboard(language, is_premium=is_premium),
                 )
             await state.clear()
             return
@@ -143,9 +145,10 @@ async def poll_answer_handler(poll_answer: PollAnswer, state: FSMContext, api_cl
         )
         chat_id = poll_answer.user.id if poll_answer.user else None
         if chat_id:
+            is_premium = await resolve_is_premium(api_client, chat_id)
             await bot.send_message(
                 chat_id,
                 get_text(language, "error"),
-                reply_markup=home_keyboard(language),
+                reply_markup=home_keyboard(language, is_premium=is_premium),
             )
         await state.clear()
