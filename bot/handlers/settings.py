@@ -44,7 +44,7 @@ async def buy_premium(message: Message, state: FSMContext, api_client):
     except NotFoundError:
         await message.answer(get_text(language, "not_found"), reply_markup=home_keyboard(language))
         return
-    except ApiClientError:3
+    except ApiClientError:
         logger.exception(
             "Failed to load user for premium purchase telegram_id=%s",
             message.from_user.id,
