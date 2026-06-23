@@ -8,14 +8,11 @@ from bot.services.payment import send_subscription_offers
 from bot.poll_sessions import remember_poll
 from bot.states import TakingTest
 from bot.texts import get_text
-from bot.uz_cyrillic import localize_quiz_content, localize_text
+from bot.uz_cyrillic import localize_quiz_content
 from core.constants import API_ROUND_COMPLETE
 
 POLL_QUESTION_LIMIT = 300
 POLL_OPTION_LIMIT = 100
-POLL_EXPLANATION_LIMIT = 200
-
-
 def format_progress_header(language: str, progress: dict) -> str:
     return get_text(
         language,
@@ -32,12 +29,12 @@ def clip_text(text: str, limit: int) -> str:
     return value[: limit - 1] + "…"
 
 
-def build_poll_explanation(description: str, explanation: str = "") -> str | None:
-    """Poll explanation (lamp): manba + tushuntirish, Telegram shows mainly on wrong answers."""
+def build_answer_feedback(description: str, explanation: str = "") -> str | None:
+    """Plain post-answer text: manba + tushuntirish (no emoji wrappers)."""
     parts = [p.strip() for p in (description, explanation) if (p or "").strip()]
     if not parts:
         return None
-    return clip_text("\n".join(parts), POLL_EXPLANATION_LIMIT)
+    return "\n".join(parts)
 
 
 def quiz_reply_keyboard(language: str, *, is_premium: bool = False):
@@ -142,10 +139,6 @@ class QuizMessenger:
             type=PollType.QUIZ,
             correct_option_id=int(question.get("correct_option_index", 0)),
             is_anonymous=False,
-            explanation=build_poll_explanation(
-                question.get("description", ""),
-                question.get("explanation", ""),
-            ),
             reply_markup=keyboard,
         )
 
@@ -307,16 +300,13 @@ class QuizMessenger:
 
         is_premium = bool(result.get("progress", {}).get("is_premium"))
         keyboard = quiz_reply_keyboard(language, is_premium=is_premium)
-        outcome_key = "quiz_correct" if result.get("is_correct") else "quiz_wrong"
-        await bot.send_message(chat_id, get_text(language, outcome_key), reply_markup=keyboard)
 
-        explanation = localize_text((result.get("explanation") or "").strip(), language)
-        if explanation:
-            await bot.send_message(
-                chat_id,
-                get_text(language, "quiz_hint", text=explanation),
-                reply_markup=keyboard,
-            )
+        feedback = build_answer_feedback(
+            question.get("description", ""),
+            question.get("explanation", "") or (result.get("explanation") or ""),
+        )
+        if feedback:
+            await bot.send_message(chat_id, feedback, reply_markup=keyboard)
 
         if result.get("is_round_complete"):
             await state.clear()
