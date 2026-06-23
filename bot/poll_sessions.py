@@ -5,8 +5,16 @@ from typing import Any
 _sessions: dict[str, dict[str, Any]] = {}
 
 
-def remember_poll(*, poll_id, question: dict, language: str, telegram_id: int) -> None:
+def remember_poll(
+    *,
+    poll_id,
+    message_id: int,
+    question: dict,
+    language: str,
+    telegram_id: int,
+) -> None:
     _sessions[str(poll_id)] = {
+        "message_id": message_id,
         "question": question,
         "language": language,
         "telegram_id": telegram_id,

@@ -72,10 +72,12 @@ async def poll_answer_handler(poll_answer: PollAnswer, state: FSMContext, api_cl
     session = get_poll_session(poll_id)
     data = await state.get_data()
 
+    poll_message_id = None
     if session:
         question = session["question"]
         language = normalize_language(session["language"])
         telegram_id = session["telegram_id"]
+        poll_message_id = session.get("message_id")
     else:
         if poll_id != str(data.get("active_poll_id", "")):
             logger.warning(
@@ -101,6 +103,7 @@ async def poll_answer_handler(poll_answer: PollAnswer, state: FSMContext, api_cl
             return
         language = normalize_language(data.get("language", "uz"))
         telegram_id = poll_answer.user.id if poll_answer.user else data.get("telegram_id")
+        poll_message_id = data.get("active_poll_message_id")
 
     if not telegram_id and poll_answer.user:
         telegram_id = poll_answer.user.id
@@ -136,6 +139,7 @@ async def poll_answer_handler(poll_answer: PollAnswer, state: FSMContext, api_cl
             language=language,
             question=question,
             answer_id=answers[option_index]["id"],
+            poll_message_id=poll_message_id,
         )
     except Exception:
         logger.exception(
