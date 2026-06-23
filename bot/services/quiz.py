@@ -1,6 +1,3 @@
-import asyncio
-import logging
-
 from aiogram import Bot
 from aiogram.enums import PollType
 from aiogram.fsm.context import FSMContext
@@ -14,12 +11,9 @@ from bot.texts import get_text
 from bot.uz_cyrillic import localize_quiz_content
 from core.constants import API_ROUND_COMPLETE
 
-logger = logging.getLogger(__name__)
-
 POLL_QUESTION_LIMIT = 300
 POLL_OPTION_LIMIT = 100
 POLL_EXPLANATION_LIMIT = 200
-POLL_DESCRIPTION_LIMIT = 1024
 
 
 def format_progress_header(language: str, progress: dict) -> str:
@@ -38,14 +32,12 @@ def clip_text(text: str, limit: int) -> str:
     return value[: limit - 1] + "…"
 
 
-def build_poll_explanation(text: str) -> str | None:
-    value = clip_text(text, POLL_EXPLANATION_LIMIT)
-    return value or None
-
-
-def build_poll_description(text: str) -> str | None:
-    value = clip_text(text, POLL_DESCRIPTION_LIMIT)
-    return value or None
+def build_poll_explanation(description: str, explanation: str = "") -> str | None:
+    """Poll explanation: Telegram shows it on wrong answers (or via lamp icon)."""
+    parts = [p.strip() for p in (description, explanation) if (p or "").strip()]
+    if not parts:
+        return None
+    return clip_text("\n".join(parts), POLL_EXPLANATION_LIMIT)
 
 
 def quiz_reply_keyboard(language: str, *, is_premium: bool = False):
@@ -150,16 +142,16 @@ class QuizMessenger:
             type=PollType.QUIZ,
             correct_option_id=int(question.get("correct_option_index", 0)),
             is_anonymous=False,
-            hide_results_until_closes=True,
-            description=build_poll_description(question.get("description", "")),
-            explanation=build_poll_explanation(question.get("explanation", "")),
+            explanation=build_poll_explanation(
+                question.get("description", ""),
+                question.get("explanation", ""),
+            ),
             reply_markup=keyboard,
         )
 
         poll_id = str(poll_message.poll.id)
         remember_poll(
             poll_id=poll_id,
-            message_id=poll_message.message_id,
             question=question,
             language=language,
             telegram_id=telegram_id,
@@ -169,7 +161,6 @@ class QuizMessenger:
         await state.update_data(
             current_question=question,
             active_poll_id=poll_id,
-            active_poll_message_id=poll_message.message_id,
             language=language,
             telegram_id=telegram_id,
             is_premium=is_premium,
@@ -282,25 +273,6 @@ class QuizMessenger:
             restart_if_complete=False,
         )
 
-    async def _close_answered_poll(
-        self,
-        *,
-        bot: Bot,
-        chat_id: int,
-        poll_message_id: int | None,
-    ) -> None:
-        if not poll_message_id:
-            return
-        try:
-            await bot.stop_poll(chat_id, poll_message_id)
-        except Exception:
-            logger.warning(
-                "stop_poll failed chat_id=%s message_id=%s",
-                chat_id,
-                poll_message_id,
-                exc_info=True,
-            )
-
     async def process_answer(
         self,
         *,
@@ -311,7 +283,6 @@ class QuizMessenger:
         language: str,
         question: dict,
         answer_id: int,
-        poll_message_id: int | None = None,
     ) -> bool:
         try:
             result = await self.api.submit_quiz_answer(
@@ -336,18 +307,6 @@ class QuizMessenger:
 
         is_premium = bool(result.get("progress", {}).get("is_premium"))
         keyboard = quiz_reply_keyboard(language, is_premium=is_premium)
-
-        if poll_message_id is None:
-            state_data = await state.get_data()
-            poll_message_id = state_data.get("active_poll_message_id")
-
-        await self._close_answered_poll(
-            bot=bot,
-            chat_id=chat_id,
-            poll_message_id=poll_message_id,
-        )
-        # Give the client a moment to render poll explanation before the next question.
-        await asyncio.sleep(0.8)
 
         if result.get("is_round_complete"):
             await state.clear()
