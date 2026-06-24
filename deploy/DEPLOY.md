@@ -114,7 +114,7 @@ nano .env
 - `SECRET_KEY` — `python -c "import secrets; print(secrets.token_urlsafe(50))"`
 - `DATABASE_URL` — пароль из шага 4
 - `BOT_TOKEN` — от @BotFather
-- `ALLOWED_HOSTS` — `api.frienfinity.uz,frienfinity.uz,IP`
+- `ALLOWED_HOSTS` — `api.frienfinity.uz,frienfinity.uz` (`127.0.0.1` и `localhost` добавляются автоматически)
 - `CSRF_TRUSTED_ORIGINS` — `https://api.frienfinity.uz`
 - `BACKEND_BASE_URL` — **`http://127.0.0.1:8001/api/v1`** (бот на том же сервере; не через HTTPS)
 

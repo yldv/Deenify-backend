@@ -26,11 +26,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key")
 DEBUG = os.getenv("DEBUG", "True") == "True"
-ALLOWED_HOSTS = [
-    host.strip()
-    for host in os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
-    if host.strip()
-]
+ALLOWED_HOSTS = list(
+    dict.fromkeys(
+        [
+            host.strip()
+            for host in os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+            if host.strip()
+        ]
+        + ["127.0.0.1", "localhost"]
+    )
+)
 
 
 # Application definition

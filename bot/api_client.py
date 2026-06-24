@@ -86,14 +86,14 @@ class BackendApiClient:
                     response_text=response_text,
                 )
         except aiohttp.ClientError as exc:
-            logger.exception(
+            logger.error(
                 "Backend request connection error: method=%s url=%s error=%s",
                 method,
                 url,
                 exc,
             )
             raise ApiClientError(
-                "Backend connection error.",
+                f"Backend connection error: {exc}",
                 method=method,
                 url=url,
             ) from exc

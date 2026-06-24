@@ -24,6 +24,7 @@ async def main():
     dispatcher = Dispatcher(storage=MemoryStorage())
     dispatcher.include_router(setup_routers())
 
+    logger.info("Backend API base URL: %s", config.backend_base_url)
     api_client = BackendApiClient(
         base_url=config.backend_base_url,
         bot_api_secret=config.bot_api_secret,
