@@ -16,7 +16,7 @@ class Command(BaseCommand):
         self.stdout.write(f"Mode: {mode}")
         self.stdout.write(f"Base URL: {settings.ATMOS_BASE_URL}")
         self.stdout.write(f"Store ID: {settings.ATMOS_STORE_ID or '(missing)'}")
-        self.stdout.write(f"Terminal ID: {settings.ATMOS_TERMINAL_ID or '(missing)'}")
+        self.stdout.write(f"Terminal ID: {settings.ATMOS_TERMINAL_ID or '(not set — optional)'}")
         self.stdout.write(f"Callback: {settings.ATMOS_CALLBACK_URL or '(missing)'}")
         self.stdout.write(f"API key set: {bool((settings.ATMOS_API_KEY or '').strip())}")
 

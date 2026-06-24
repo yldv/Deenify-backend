@@ -20,7 +20,7 @@ test_mode = os.environ.get("ATMOS_TEST_MODE", "False") == "True"
 
 print("mode:", "TEST" if test_mode else "PROD")
 print("store_id:", store)
-print("terminal_id:", terminal or "(missing — required in prod)")
+print("terminal_id:", terminal or "(not set — optional)")
 
 creds = base64.b64encode(f"{key}:{secret}".encode()).decode()
 

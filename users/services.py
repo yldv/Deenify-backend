@@ -230,15 +230,12 @@ class AtmosPaymentService:
         self.return_url = settings.ATMOS_RETURN_URL
 
     def is_configured(self):
-        base = bool(
+        return bool(
             self.base_url
             and self.store_id
             and self.consumer_key
             and self.consumer_secret
         )
-        if not settings.ATMOS_TEST_MODE:
-            return base and bool(self.terminal_id)
-        return base
 
     def missing_config_fields(self):
         missing = []
@@ -248,8 +245,6 @@ class AtmosPaymentService:
             missing.append("ATMOS_CONSUMER_KEY")
         if not self.consumer_secret:
             missing.append("ATMOS_CONSUMER_SECRET")
-        if not settings.ATMOS_TEST_MODE and not self.terminal_id:
-            missing.append("ATMOS_TERMINAL_ID")
         return missing
 
     @staticmethod
