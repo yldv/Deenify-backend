@@ -68,10 +68,10 @@ class Command(BaseCommand):
             deleted_feedback, _ = Feedback.objects.all().delete()
 
             deleted_progress, _ = UserAnsweredTest.objects.all().delete()
-            deleted_tests, breakdown = Test.objects.all().delete()
-            deleted_answers = breakdown.get("tests.Answer", 0)
+            deleted_answers, _ = Answer.objects.all().delete()
+            deleted_tests, _ = Test.objects.all().delete()
 
-            users_reset = TelegramUser.objects.update(quiz_round=1)
+            users_reset = TelegramUser.objects.update(quiz_round=1, free_tests_taken=0)
 
         self.stdout.write(
             self.style.SUCCESS(
