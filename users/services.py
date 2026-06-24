@@ -255,7 +255,9 @@ class AtmosPaymentService:
         except Exception:
             return {"error": str(exc), "status": exc.code}
 
-    def _request_json(self, path, *, payload=None, headers=None, method="POST"):
+    def _request_json(self, path, *, payload=None, headers=None, method="POST", timeout=None):
+        if timeout is None:
+            timeout = settings.ATMOS_REQUEST_TIMEOUT
         data = None
         request_headers = headers or {}
         if payload is not None:
@@ -269,7 +271,7 @@ class AtmosPaymentService:
             method=method,
         )
         try:
-            with urlopen(request, timeout=20) as response:
+            with urlopen(request, timeout=timeout) as response:
                 body = response.read().decode("utf-8")
                 return json.loads(body) if body else {}
         except HTTPError as exc:
@@ -290,7 +292,7 @@ class AtmosPaymentService:
             method="POST",
         )
         try:
-            with urlopen(request, timeout=20) as response:
+            with urlopen(request, timeout=settings.ATMOS_REQUEST_TIMEOUT) as response:
                 raw = json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             error_payload = self._read_http_body(exc)
@@ -590,6 +592,7 @@ class AtmosPaymentService:
             "/merchant/pay/apply",
             payload=payload,
             headers=self._merchant_headers(access_token),
+            timeout=settings.ATMOS_APPLY_TIMEOUT,
         )
 
     @staticmethod
@@ -604,8 +607,8 @@ class AtmosPaymentService:
         message = str(exc).lower()
         if "timed out" in message or "timeout" in message:
             return (
-                "Cannot reach Atmos API (apigw.atmos.uz timeout). "
-                "The server may need Uzbekistan network access or Atmos IP whitelist."
+                "Atmos API did not respond in time. "
+                "If this happens on apply, increase ATMOS_APPLY_TIMEOUT in .env."
             )
         if "nodename nor servname" in message or "name or service not known" in message:
             return "Cannot resolve Atmos API host. Check ATMOS_BASE_URL."
@@ -785,10 +788,13 @@ def create_atmos_order(*, user, plan):
     order.payment_url = payment["payment_url"]
     order.atmos_transaction_id = payment["transaction_id"]
     order.request_payload = payment.get("request", {})
-    order.response_payload = {
-        **payment.get("raw", {}),
-        **({"error": payment["error"]} if payment.get("error") else {}),
-    }
+    _init_atmos_trace(
+        order,
+        step="merchant/pay/create",
+        request=payment.get("request", {}),
+        response=payment.get("raw", {}),
+        error=payment.get("error") or "",
+    )
     if order.payment_url:
         order.status = AtmosOrder.Status.PENDING
     order.save(
@@ -1074,6 +1080,11 @@ def charge_subscription(*, user, plan, bound_card, is_auto_renewal=False):
             error = str(raw["error"])
         return {"ok": False, "error": error or "Atmos did not return transaction id.", "order": order}
 
+    pre_request = {
+        "store_id": int(service._normalize_store_id(service.store_id)),
+        "transaction_id": int(order.atmos_transaction_id),
+        "card_token": _mask_atmos_secret(bound_card.card_token),
+    }
     try:
         pre_raw = service.pre_apply(
             transaction_id=order.atmos_transaction_id,
@@ -1081,6 +1092,13 @@ def charge_subscription(*, user, plan, bound_card, is_auto_renewal=False):
         )
     except (OSError, URLError, ValueError) as exc:
         return {"ok": False, "error": service._format_request_error(exc), "order": order}
+    _append_atmos_trace(
+        order,
+        step="merchant/pay/pre-apply",
+        request=pre_request,
+        response=pre_raw,
+    )
+    order.save(update_fields=("response_payload", "updated_at"))
     pre_error = service._extract_api_error(pre_raw)
     if pre_error:
         logger.warning(
@@ -1092,6 +1110,11 @@ def charge_subscription(*, user, plan, bound_card, is_auto_renewal=False):
         _mark_order_failed(order, pre_raw)
         return {"ok": False, "error": pre_error, "order": order, "raw": pre_raw}
 
+    apply_request = {
+        "store_id": int(service._normalize_store_id(service.store_id)),
+        "transaction_id": int(order.atmos_transaction_id),
+        "otp": _mask_atmos_secret(settings.ATMOS_TOKEN_PAYMENT_OTP),
+    }
     try:
         raw = service.apply(
             transaction_id=order.atmos_transaction_id,
@@ -1099,6 +1122,12 @@ def charge_subscription(*, user, plan, bound_card, is_auto_renewal=False):
         )
     except (OSError, URLError, ValueError) as exc:
         return {"ok": False, "error": service._format_request_error(exc), "order": order}
+    _append_atmos_trace(
+        order,
+        step="merchant/pay/apply",
+        request=apply_request,
+        response=raw,
+    )
 
     api_error = service._extract_api_error(raw)
     store_transaction = raw.get("store_transaction") or {}
@@ -1115,6 +1144,7 @@ def charge_subscription(*, user, plan, bound_card, is_auto_renewal=False):
         _mark_order_failed(order, raw)
         return {"ok": False, "error": api_error or "Payment was not confirmed.", "order": order, "raw": raw}
 
+    order.save(update_fields=("response_payload", "updated_at"))
     transaction_id = str(
         store_transaction.get("success_trans_id")
         or store_transaction.get("trans_id")
@@ -1131,15 +1161,54 @@ def charge_subscription(*, user, plan, bound_card, is_auto_renewal=False):
             "performed_at": timezone.now(),
         },
     )
-    subscription = order.mark_as_paid(atmos_transaction_id=transaction_id, payload=raw)
+    subscription = order.mark_as_paid(
+        atmos_transaction_id=transaction_id,
+        payload=_order_trace_payload(order),
+    )
     after_order_paid(order)
     return {"ok": True, "order": order, "subscription": subscription, "raw": raw}
 
 
+def _mask_atmos_secret(value) -> str:
+    text = str(value or "").strip()
+    if len(text) <= 8:
+        return "***"
+    return f"{text[:4]}...{text[-4:]}"
+
+
+def _order_trace_payload(order) -> dict:
+    if isinstance(order.response_payload, dict):
+        return dict(order.response_payload)
+    return {}
+
+
+def _init_atmos_trace(order, *, step: str, request: dict, response: dict, error: str = "") -> None:
+    payload = {
+        "atmos_trace": [{"step": step, "request": request, "response": response}],
+        "last_step": step,
+    }
+    if error:
+        payload["error"] = error
+    order.response_payload = payload
+
+
+def _append_atmos_trace(order, *, step: str, request: dict, response: dict) -> None:
+    payload = _order_trace_payload(order)
+    trace = list(payload.get("atmos_trace") or [])
+    trace.append({"step": step, "request": request, "response": response})
+    payload["atmos_trace"] = trace
+    payload["last_step"] = step
+    order.response_payload = payload
+
+
 def _mark_order_failed(order, payload):
     order.status = AtmosOrder.Status.FAILED
+    existing = _order_trace_payload(order)
     if payload:
-        order.response_payload = payload
+        existing["last_error_response"] = payload
+        if isinstance(payload, dict) and payload.get("result"):
+            existing["result"] = payload["result"]
+    order.response_payload = existing
     order.save(update_fields=("status", "response_payload", "updated_at"))
 
 
@@ -1455,7 +1524,12 @@ def process_atmos_callback(payload):
         }
 
     update_fields = ["response_payload", "updated_at"]
-    order.response_payload = payload
+    _append_atmos_trace(
+        order,
+        step="callback (Atmos -> merchant)",
+        request=payload,
+        response={"status": 1, "message": "Successfully"},
+    )
     if transaction_id and str(order.atmos_transaction_id) != str(transaction_id):
         order.atmos_transaction_id = str(transaction_id)
         update_fields.append("atmos_transaction_id")

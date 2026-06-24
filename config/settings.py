@@ -266,6 +266,9 @@ ATMOS_INVOICE_EXPIRATION_SECONDS = int(
 # Atmos does not send an SMS for token charges. Sandbox accepts 111111.
 # CONFIRM the production value with Atmos before going live.
 ATMOS_TOKEN_PAYMENT_OTP = os.environ.get('ATMOS_TOKEN_PAYMENT_OTP', '111111').strip()
+# HTTP timeouts (seconds) when calling apigw.atmos.uz. Apply waits for billing + callback.
+ATMOS_REQUEST_TIMEOUT = int(os.environ.get('ATMOS_REQUEST_TIMEOUT', '45'))
+ATMOS_APPLY_TIMEOUT = int(os.environ.get('ATMOS_APPLY_TIMEOUT', '120'))
 # Referral bonus days granted to the inviter on the invited user's FIRST payment.
 ATMOS_REFERRAL_BONUS_DAYS_MONTHLY = int(
     os.environ.get('ATMOS_REFERRAL_BONUS_DAYS_MONTHLY', '10')

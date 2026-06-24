@@ -178,6 +178,7 @@ class AtmosOrderCreateResponseSerializer(serializers.ModelSerializer):
         return (
             payload.get("error")
             or payload.get("detail")
+            or self._extract_result_error(payload.get("last_error_response") or {})
             or self._extract_result_error(payload)
             or "Payment URL was not created."
         )

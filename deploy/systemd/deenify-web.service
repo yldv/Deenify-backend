@@ -10,7 +10,7 @@ EnvironmentFile=/var/www/deenify/.env
 ExecStart=/var/www/deenify/.venv/bin/gunicorn config.wsgi:application \
     --bind 127.0.0.1:8001 \
     --workers 2 \
-    --timeout 120
+    --timeout 180
 Restart=always
 RestartSec=5
 
