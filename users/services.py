@@ -230,12 +230,15 @@ class AtmosPaymentService:
         self.return_url = settings.ATMOS_RETURN_URL
 
     def is_configured(self):
-        return bool(
+        base = bool(
             self.base_url
             and self.store_id
             and self.consumer_key
             and self.consumer_secret
         )
+        if not settings.ATMOS_TEST_MODE:
+            return base and bool(self.terminal_id)
+        return base
 
     def missing_config_fields(self):
         missing = []
@@ -245,6 +248,8 @@ class AtmosPaymentService:
             missing.append("ATMOS_CONSUMER_KEY")
         if not self.consumer_secret:
             missing.append("ATMOS_CONSUMER_SECRET")
+        if not settings.ATMOS_TEST_MODE and not self.terminal_id:
+            missing.append("ATMOS_TERMINAL_ID")
         return missing
 
     @staticmethod
@@ -330,14 +335,12 @@ class AtmosPaymentService:
         return "https://checkout.pays.uz"
 
     def _merchant_headers(self, access_token: str) -> dict:
-        headers = {
+        # Outbound merchant/partner API: Bearer token only (docs.atmos.uz).
+        # ATMOS_API_KEY is for validating incoming callbacks, not outbound requests.
+        return {
             "Authorization": f"Bearer {access_token}",
             "Accept": "application/json",
         }
-        api_key = (settings.ATMOS_API_KEY or "").strip()
-        if api_key:
-            headers["X-Api-Key"] = api_key
-        return headers
 
     @staticmethod
     def _is_success_code(code) -> bool:
@@ -387,7 +390,14 @@ class AtmosPaymentService:
         if raw.get("detail"):
             return str(raw["detail"])
         if raw.get("http_status"):
-            return f"Atmos HTTP {raw['http_status']}"
+            code = raw["http_status"]
+            if code == 403:
+                return (
+                    "Atmos denied access (HTTP 403). "
+                    "Ask Atmos to whitelist your server IP and enable Merchant API "
+                    "for this Store/Terminal."
+                )
+            return f"Atmos HTTP {code}"
         return ""
 
     @staticmethod
@@ -611,7 +621,11 @@ class AtmosPaymentService:
             missing = ", ".join(self.missing_config_fields())
             detail = (
                 f"Atmos is not configured. Set in .env: {missing}. "
-                "Get test keys at https://partner-test.atmos.uz"
+                + (
+                    "Get prod keys at https://partner.atmos.uz"
+                    if not settings.ATMOS_TEST_MODE
+                    else "Get test keys at https://partner-test.atmos.uz"
+                )
             )
             logger.warning("Atmos payment skipped: %s", detail)
             return {

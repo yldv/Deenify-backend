@@ -43,8 +43,6 @@ def call(path, body, tok):
         "Authorization": f"Bearer {tok}",
         "Content-Type": "application/json",
     }
-    if API_KEY:
-        headers["X-Api-Key"] = API_KEY
     req = Request(f"{BASE}{path}", data=json.dumps(body).encode(), headers=headers, method="POST")
     try:
         with urlopen(req, timeout=30) as r:
@@ -59,8 +57,18 @@ print("=== 1) merchant/pay/create ===")
 acc = f"d-{uuid.uuid4().hex[:8]}"
 created = call(
     "/merchant/pay/create",
-    {"amount": 40000000, "account": acc, "store_id": str(STORE), "lang": "uz",
-     "redirect_link": os.environ.get("ATMOS_RETURN_URL", "")},
+    {
+        "amount": 40000000,
+        "account": acc,
+        "store_id": str(STORE),
+        "lang": "uz",
+        "redirect_link": os.environ.get("ATMOS_RETURN_URL", ""),
+        **(
+            {"terminal_id": os.environ["ATMOS_TERMINAL_ID"].strip()}
+            if os.environ.get("ATMOS_TERMINAL_ID", "").strip()
+            else {}
+        ),
+    },
     tok,
 )
 print(json.dumps(created, ensure_ascii=False)[:300])
