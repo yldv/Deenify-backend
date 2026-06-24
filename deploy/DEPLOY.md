@@ -116,7 +116,7 @@ nano .env
 - `BOT_TOKEN` — от @BotFather
 - `ALLOWED_HOSTS` — `api.frienfinity.uz,frienfinity.uz,IP`
 - `CSRF_TRUSTED_ORIGINS` — `https://api.frienfinity.uz`
-- `BACKEND_BASE_URL` — `https://api.frienfinity.uz/api/v1` (после SSL; до SSL `http://IP/api/v1`)
+- `BACKEND_BASE_URL` — **`http://127.0.0.1:8001/api/v1`** (бот на том же сервере; не через HTTPS)
 
 ---
 
@@ -281,22 +281,45 @@ ATMOS_API_KEY=   # from Atmos after callback URL is registered
 
 ## 10. SSL (HTTPS)
 
-Когда DNS `api.frienfinity.uz` указывает на сервер:
+Когда DNS `api.frienfinity.uz` указывает на сервер.
+
+### Если openssl показывает чужой сертификат (vt-travel.uz и т.д.)
+
+На сервере нет `listen 443 ssl` для `api.frienfinity.uz` — nginx отдаёт **default_server** другого сайта.
 
 ```bash
-sudo certbot --nginx -d api.frienfinity.uz
+cd /var/www/deenify
+git pull
+sudo bash deploy/scripts/fix-nginx-ssl.sh
 ```
 
-В `.env` обновите:
+Или вручную в certbot выберите **1** (reinstall), затем:
+
+```bash
+sudo cp deploy/nginx/deenify.conf /etc/nginx/sites-available/deenify
+sudo cp deploy/nginx/atmos-checkout-proxy.conf /etc/nginx/snippets/
+sudo ln -sf /etc/nginx/sites-available/deenify /etc/nginx/sites-enabled/deenify
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Проверка:
+
+```bash
+echo | openssl s_client -connect api.frienfinity.uz:443 -servername api.frienfinity.uz 2>/dev/null \
+  | openssl x509 -noout -subject -ext subjectAltName
+# Должно быть: api.frienfinity.uz (не vt-travel.uz)
+```
+
+### `.env` после SSL
 
 ```env
-BACKEND_BASE_URL=https://api.frienfinity.uz/api/v1
+# Бот — всегда localhost (на том же сервере):
+BACKEND_BASE_URL=http://127.0.0.1:8001/api/v1
+
 ATMOS_CALLBACK_URL=https://api.frienfinity.uz/api/v1/payments/atmos/callback/
 ATMOS_RETURN_URL=https://api.frienfinity.uz/api/v1/payments/atmos/return/
 ATMOS_SUCCESS_REDIRECT_URL=https://t.me/DeenifyUzBot
 ```
-
-Зарегистрируйте callback URL в **partner-test.atmos.uz** и добавьте выданный `ATMOS_API_KEY` в `.env`.
 
 ```bash
 sudo systemctl restart deenify-web deenify-bot
