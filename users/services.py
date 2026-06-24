@@ -1083,6 +1083,12 @@ def charge_subscription(*, user, plan, bound_card, is_auto_renewal=False):
         return {"ok": False, "error": service._format_request_error(exc), "order": order}
     pre_error = service._extract_api_error(pre_raw)
     if pre_error:
+        logger.warning(
+            "Atmos pre-apply rejected order=%s error=%s raw=%s",
+            order.merchant_order_id,
+            pre_error,
+            pre_raw,
+        )
         _mark_order_failed(order, pre_raw)
         return {"ok": False, "error": pre_error, "order": order, "raw": pre_raw}
 
@@ -1100,6 +1106,12 @@ def charge_subscription(*, user, plan, bound_card, is_auto_renewal=False):
         (raw.get("result") or {}).get("code")
     )
     if api_error or not confirmed:
+        logger.warning(
+            "Atmos apply rejected order=%s error=%s raw=%s",
+            order.merchant_order_id,
+            api_error,
+            raw,
+        )
         _mark_order_failed(order, raw)
         return {"ok": False, "error": api_error or "Payment was not confirmed.", "order": order, "raw": raw}
 
