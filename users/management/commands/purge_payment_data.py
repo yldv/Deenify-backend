@@ -1,23 +1,28 @@
-"""Remove all payment-related test data before prod go-live.
+"""Remove test/sandbox data before prod go-live.
 
-Deletes: premium subscriptions, Atmos orders/transactions, bound cards, feedback.
-Telegram users and quiz progress are kept.
+Deletes payment records, quiz questions/answers, and user quiz progress.
+Keeps: Telegram users, subscription plans, test categories.
 """
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
+from tests.models import Answer, Test, UserAnsweredTest
 from users.models import (
     AtmosOrder,
     AtmosTransaction,
     BoundCard,
     Feedback,
+    TelegramUser,
     UserPremiumSubscription,
 )
 
 
 class Command(BaseCommand):
-    help = "Delete all payment test data (orders, transactions, cards, subscriptions, feedback)."
+    help = (
+        "Delete payment + quiz sandbox data "
+        "(orders, subscriptions, cards, feedback, questions, answers, user progress)."
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -38,9 +43,13 @@ class Command(BaseCommand):
             "atmos_transactions": AtmosTransaction.objects.count(),
             "bound_cards": BoundCard.objects.count(),
             "feedback": Feedback.objects.count(),
+            "user_answered_tests": UserAnsweredTest.objects.count(),
+            "answers": Answer.objects.count(),
+            "tests": Test.objects.count(),
+            "users_with_quiz_round_gt_1": TelegramUser.objects.filter(quiz_round__gt=1).count(),
         }
 
-        self.stdout.write("Payment data to remove:")
+        self.stdout.write("Rows to remove / reset:")
         for key, value in counts.items():
             self.stdout.write(f"  {key}: {value}")
 
@@ -58,6 +67,12 @@ class Command(BaseCommand):
             deleted_cards, _ = BoundCard.objects.all().delete()
             deleted_feedback, _ = Feedback.objects.all().delete()
 
+            deleted_progress, _ = UserAnsweredTest.objects.all().delete()
+            deleted_tests, breakdown = Test.objects.all().delete()
+            deleted_answers = breakdown.get("tests.Answer", 0)
+
+            users_reset = TelegramUser.objects.update(quiz_round=1)
+
         self.stdout.write(
             self.style.SUCCESS(
                 "Deleted: "
@@ -65,6 +80,10 @@ class Command(BaseCommand):
                 f"{deleted_orders} order(s), "
                 f"{deleted_tx} transaction(s), "
                 f"{deleted_cards} card(s), "
-                f"{deleted_feedback} feedback(s)."
+                f"{deleted_feedback} feedback(s), "
+                f"{deleted_progress} user answer(s), "
+                f"{deleted_tests} question(s), "
+                f"{deleted_answers} answer option(s). "
+                f"Reset quiz_round for {users_reset} user(s)."
             )
         )
