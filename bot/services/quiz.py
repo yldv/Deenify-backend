@@ -94,6 +94,18 @@ class QuizMessenger:
             return False
         if isinstance(exc, ApiClientError):
             await state.clear()
+            detail = ""
+            if isinstance(exc.payload, dict):
+                detail = str(exc.payload.get("detail") or "").lower()
+            # Duplicate/late poll answers can arrive after state moved on.
+            # Treat backend 400 validation as an expired quiz session instead of a hard error.
+            if exc.status == 400 and ("already completed" in detail or "validationerror" in detail):
+                await bot.send_message(
+                    chat_id,
+                    get_text(language, "quiz_session_expired"),
+                    reply_markup=quiz_reply_keyboard(language, is_premium=is_premium),
+                )
+                return False
             await bot.send_message(
                 chat_id,
                 get_text(language, "error"),
