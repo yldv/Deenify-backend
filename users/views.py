@@ -42,6 +42,7 @@ from .services import (
     get_referral_stats,
     get_user_statistics,
     process_atmos_callback,
+    parse_atmos_callback_payload,
     remove_bound_card,
     set_telegram_user_bot_active,
     start_card_binding,
@@ -527,7 +528,8 @@ class AtmosCallbackView(APIView):
     permission_classes = ()
 
     def post(self, request):
-        result = process_atmos_callback(request.data)
+        payload = parse_atmos_callback_payload(request)
+        result = process_atmos_callback(payload)
         return Response(
             {
                 "status": result.get("atmos_status", 0),

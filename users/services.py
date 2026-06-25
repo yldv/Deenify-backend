@@ -1348,6 +1348,45 @@ def get_referral_stats(user):
     }
 
 
+def parse_atmos_callback_payload(request) -> dict:
+    """Normalize Atmos callback body (JSON object, raw JSON string, or wrapped field)."""
+    data = getattr(request, "data", None)
+    if isinstance(data, dict) and data:
+        if not any(
+            key in data
+            for key in ("store_id", "transaction_id", "sign", "account", "invoice", "amount")
+        ):
+            for value in data.values():
+                if isinstance(value, str) and value.strip().startswith("{"):
+                    try:
+                        parsed = json.loads(value)
+                        if isinstance(parsed, dict):
+                            return parsed
+                    except json.JSONDecodeError:
+                        continue
+        return data
+    if isinstance(data, str) and data.strip():
+        try:
+            parsed = json.loads(data)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    body = getattr(request, "body", b"") or b""
+    if body:
+        try:
+            parsed = json.loads(body.decode("utf-8"))
+            if isinstance(parsed, dict):
+                return parsed
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            pass
+    return {}
+
+
+def _atmos_callback_ok_message() -> str:
+    return settings.ATMOS_CALLBACK_SUCCESS_MESSAGE
+
+
 def extract_callback_value(payload, *keys):
     for key in keys:
         value = payload.get(key)
@@ -1470,8 +1509,25 @@ def sync_atmos_order_payment(order) -> bool:
 def process_atmos_callback(payload):
     """
     Atmos Callback API (docs.atmos.uz): validate invoice before payment.
-    Response must be {"status": 1, "message": "..."} to allow payment.
+    Response must be {"status": 1, "message": "Успешно"} to allow payment.
     """
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError:
+            payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+
+    ok_message = _atmos_callback_ok_message()
+    logger.info(
+        "Atmos callback: store_id=%s transaction_id=%s account=%s amount=%s",
+        extract_callback_value(payload, "store_id"),
+        extract_callback_value(payload, "transaction_id"),
+        _callback_invoice_for_sign(payload),
+        extract_callback_value(payload, "amount"),
+    )
+
     merchant_order_id = extract_callback_value(
         payload,
         "invoice",
@@ -1490,6 +1546,7 @@ def process_atmos_callback(payload):
     raw_amount = extract_callback_value(payload, "amount", "total", "sum")
 
     if not validate_atmos_callback_sign(payload):
+        logger.warning("Atmos callback rejected: invalid signature")
         return {
             "ok": False,
             "atmos_status": 0,
@@ -1541,12 +1598,21 @@ def process_atmos_callback(payload):
         return {
             "ok": True,
             "atmos_status": 1,
-            "message": "Successfully",
+            "message": ok_message,
             "http_status": 200,
             "order": order,
         }
 
-    if order.status not in (AtmosOrder.Status.CREATED, AtmosOrder.Status.PENDING):
+    if order.status not in (
+        AtmosOrder.Status.CREATED,
+        AtmosOrder.Status.PENDING,
+        AtmosOrder.Status.FAILED,
+    ):
+        logger.warning(
+            "Atmos callback rejected: order %s status=%s",
+            order.merchant_order_id,
+            order.status,
+        )
         return {
             "ok": False,
             "atmos_status": 0,
@@ -1555,11 +1621,12 @@ def process_atmos_callback(payload):
         }
 
     update_fields = ["response_payload", "updated_at"]
+    callback_response = {"status": 1, "message": ok_message}
     _append_atmos_trace(
         order,
         step="callback (Atmos -> merchant)",
         request=payload,
-        response={"status": 1, "message": "Successfully"},
+        response=callback_response,
     )
     if transaction_id and str(order.atmos_transaction_id) != str(transaction_id):
         order.atmos_transaction_id = str(transaction_id)
@@ -1567,12 +1634,20 @@ def process_atmos_callback(payload):
     if order.status == AtmosOrder.Status.CREATED:
         order.status = AtmosOrder.Status.PENDING
         update_fields.append("status")
+    elif order.status == AtmosOrder.Status.FAILED:
+        order.status = AtmosOrder.Status.PENDING
+        update_fields.append("status")
     order.save(update_fields=update_fields)
 
+    logger.info(
+        "Atmos callback validated order=%s transaction_id=%s",
+        order.merchant_order_id,
+        transaction_id,
+    )
     return {
         "ok": True,
         "atmos_status": 1,
-        "message": "Successfully",
+        "message": ok_message,
         "http_status": 200,
         "order": order,
     }

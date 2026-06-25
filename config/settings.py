@@ -263,6 +263,9 @@ elif ATMOS_CALLBACK_URL and '/api/' in ATMOS_CALLBACK_URL:
 else:
     ATMOS_CHECKOUT_PROXY_BASE = ''
 ATMOS_SIGN_ALGORITHM = os.environ.get('ATMOS_SIGN_ALGORITHM', 'md5')
+ATMOS_CALLBACK_SUCCESS_MESSAGE = os.environ.get(
+    'ATMOS_CALLBACK_SUCCESS_MESSAGE', 'Успешно'
+).strip() or 'Успешно'
 # Sandbox treats this as seconds (~60s with value 60). Default: 1 hour.
 ATMOS_INVOICE_EXPIRATION_SECONDS = int(
     os.environ.get('ATMOS_INVOICE_EXPIRATION_SECONDS', '3600')
