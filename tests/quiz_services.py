@@ -147,7 +147,6 @@ def submit_quiz_answer(*, user, test_id, answer_id):
 
     return {
         "is_correct": is_correct,
-        "explanation": test.explanation,
         "progress": progress,
         "is_round_complete": progress["is_round_complete"],
     }

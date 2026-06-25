@@ -110,12 +110,8 @@ class QuizAnswerView(QuizAPIView):
         except (PaymentRequired, PermissionDenied, ValidationError, LookupError) as exc:
             return self.handle_quiz_errors(user, exc)
 
-        def build_payload():
-            result["explanation"] = result.get("explanation") or ""
-            return result
-
         return Response(
-            self.with_user_language(request, user, build_payload),
+            self.with_user_language(request, user, lambda: result),
             status=status.HTTP_200_OK,
         )
 

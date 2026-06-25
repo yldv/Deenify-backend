@@ -10,7 +10,7 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
-        test_fields = ("title", "question", "description", "explanation")
+        test_fields = ("title", "question", "description")
         answer_fields = ("text",)
         tests_updated = 0
         answers_updated = 0

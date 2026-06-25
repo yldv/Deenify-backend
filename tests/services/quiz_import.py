@@ -95,9 +95,7 @@ def normalize_question(item: dict, index: int) -> dict:
         "description": normalize_text_field(
             item.get("description", item.get("manba", ""))
         ),
-        "explanation": normalize_text_field(item.get("explanation", "")),
         "answers": normalize_answers(item.get("answers", [])),
-        "is_premium": bool(item.get("is_premium", False)),
     }
 
 
@@ -143,7 +141,6 @@ def upsert_test(category: TestCategory, item: dict) -> Test:
         "category": category,
         "level": item["level"],
         "is_active": True,
-        "is_premium": item["is_premium"],
         "sort_order": item["sort_order"],
         **translated_defaults(
             Test,
@@ -151,7 +148,6 @@ def upsert_test(category: TestCategory, item: dict) -> Test:
                 "title": item["title"],
                 "question": item["question"],
                 "description": item["description"],
-                "explanation": item["explanation"],
             },
         ),
     }

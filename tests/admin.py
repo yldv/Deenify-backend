@@ -11,7 +11,7 @@ from tests.services.quiz_import import (
     parse_json_payload,
 )
 
-TRANSLATED_TEST_FIELDS = ("title", "question", "description", "explanation")
+TRANSLATED_TEST_FIELDS = ("title", "question", "description")
 
 
 def _language_fieldset(label: str, css_class: str, suffix: str) -> tuple:
@@ -39,11 +39,10 @@ class TestAdmin(admin.ModelAdmin):
         "title",
         "level_badge",
         "is_active",
-        "is_premium",
         "sort_order",
         "answers_count",
     )
-    list_filter = ("level", "is_active", "is_premium")
+    list_filter = ("level", "is_active")
     search_fields = (
         "title",
         "title_uz",
@@ -61,7 +60,7 @@ class TestAdmin(admin.ModelAdmin):
         (
             "Sozlamalar",
             {
-                "fields": ("level", "sort_order", "is_active", "is_premium"),
+                "fields": ("level", "sort_order", "is_active"),
             },
         ),
         _language_fieldset("O'zbekcha (lotin)", "deenify-fs-uz", "uz"),

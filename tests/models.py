@@ -61,12 +61,7 @@ class Test(TimeStampedModel):
     description = models.TextField(
         _("description"),
         blank=True,
-        help_text=_("Source citation shown in Telegram quiz poll (not the answer explanation)."),
-    )
-    explanation = models.TextField(
-        _("explanation"),
-        blank=True,
-        help_text=_("Short feedback after the user answers (not shown in the poll)."),
+        help_text=_("Source citation shown in Telegram quiz poll on wrong answers."),
     )
     level = models.CharField(
         _("level"),
@@ -76,7 +71,6 @@ class Test(TimeStampedModel):
         db_index=True,
     )
     is_active = models.BooleanField(_("is active"), default=True)
-    is_premium = models.BooleanField(_("is premium"), default=False)
     sort_order = models.PositiveSmallIntegerField(_("sort order"), default=0)
 
     class Meta:
@@ -100,8 +94,6 @@ class Test(TimeStampedModel):
 
     def can_be_taken_by(self, user):
         if not self.is_active:
-            return False
-        if self.is_premium and not user.has_active_premium():
             return False
         return user.can_take_test()
 
