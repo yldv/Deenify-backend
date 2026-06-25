@@ -1356,18 +1356,36 @@ def extract_callback_value(payload, *keys):
     return ""
 
 
+def _callback_invoice_for_sign(payload) -> str:
+    """Atmos callback: invoice id is sent as ``invoice`` or ``account``."""
+    return str(
+        extract_callback_value(
+            payload,
+            "invoice",
+            "account",
+            "merchant_order_id",
+            "order_id",
+            "store_order_id",
+        )
+    )
+
+
 def calculate_atmos_sign(payload):
     api_key = settings.ATMOS_API_KEY
     algorithm = settings.ATMOS_SIGN_ALGORITHM.lower()
     source = "".join(
-        str(extract_callback_value(payload, key))
-        for key in ("store_id", "transaction_id", "invoice", "amount")
+        [
+            str(extract_callback_value(payload, "store_id")),
+            str(extract_callback_value(payload, "transaction_id")),
+            _callback_invoice_for_sign(payload),
+            str(extract_callback_value(payload, "amount")),
+            api_key,
+        ]
     )
-    source = f"{source}{api_key}"
     try:
         digest = hashlib.new(algorithm)
     except ValueError:
-        digest = hashlib.sha256()
+        digest = hashlib.md5()
     digest.update(source.encode("utf-8"))
     return digest.hexdigest()
 
@@ -1388,7 +1406,20 @@ def validate_atmos_callback_sign(payload):
         return False
 
     calculated = calculate_atmos_sign(payload).lower()
-    return hmac.compare_digest(str(expected_sign).lower(), calculated)
+    if hmac.compare_digest(str(expected_sign).lower(), calculated):
+        return True
+
+    logger.warning(
+        "Atmos callback signature mismatch store_id=%s transaction_id=%s account=%s "
+        "algorithm=%s received_sign=%s calculated_sign=%s",
+        extract_callback_value(payload, "store_id"),
+        extract_callback_value(payload, "transaction_id"),
+        _callback_invoice_for_sign(payload),
+        settings.ATMOS_SIGN_ALGORITHM,
+        expected_sign,
+        calculated,
+    )
+    return False
 
 
 def sync_atmos_order_payment(order) -> bool:
