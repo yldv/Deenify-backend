@@ -143,6 +143,9 @@ class UserPremiumSubscriptionAdmin(admin.ModelAdmin):
     autocomplete_fields = ("user", "plan", "source_order", "bound_card")
     ordering = ("-starts_at",)
 
+    def get_queryset(self, request):
+        return UserPremiumSubscription.current_queryset()
+
     @admin.display(boolean=True, description="Joriy")
     def is_current(self, obj):
         return obj.is_current

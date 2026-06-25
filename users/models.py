@@ -291,6 +291,23 @@ class UserPremiumSubscription(TimeStampedModel):
             self.expires_at is None or self.expires_at > now
         )
 
+    @classmethod
+    def current_queryset(cls):
+        """Subscriptions that are active right now (same rules as ``is_current``)."""
+        now = timezone.now()
+        return cls.objects.filter(is_active=True, starts_at__lte=now).filter(
+            models.Q(expires_at__isnull=True) | models.Q(expires_at__gt=now)
+        )
+
+    @classmethod
+    def deactivate_superseded(cls, user, *, keep_pk):
+        """Turn off stale rows after a renewal or new purchase extends coverage."""
+        cls.objects.filter(user=user).exclude(pk=keep_pk).update(
+            is_active=False,
+            auto_renew=False,
+            updated_at=timezone.now(),
+        )
+
 
 class AtmosOrder(TimeStampedModel):
     class Status(models.TextChoices):
@@ -404,6 +421,43 @@ class AtmosOrder(TimeStampedModel):
 
             duration_delta = order.plan.get_duration_delta() if order.plan else None
 
+            def _apply_payment_extension(subscription):
+                if subscription.expires_at is None:
+                    UserPremiumSubscription.deactivate_superseded(
+                        order.user, keep_pk=subscription.pk
+                    )
+                    return subscription
+                if duration_delta is None:
+                    subscription.expires_at = None
+                elif subscription.expires_at <= now:
+                    subscription.expires_at = now + duration_delta
+                else:
+                    subscription.expires_at = subscription.expires_at + duration_delta
+                if order.plan_id:
+                    subscription.plan = order.plan
+                if order.bound_card_id:
+                    subscription.bound_card = order.bound_card
+                    subscription.auto_renew = True
+                subscription.source = UserPremiumSubscription.Source.PAYMENT
+                subscription.source_order = order
+                subscription.is_active = True
+                subscription.save(
+                    update_fields=(
+                        "expires_at",
+                        "plan",
+                        "bound_card",
+                        "auto_renew",
+                        "source",
+                        "source_order",
+                        "is_active",
+                        "updated_at",
+                    )
+                )
+                UserPremiumSubscription.deactivate_superseded(
+                    order.user, keep_pk=subscription.pk
+                )
+                return subscription
+
             # Extend the user's CURRENT active subscription in place so repeated
             # purchases (and renewals) accumulate onto one row instead of creating
             # separate, future-dated periods that the status view would ignore.
@@ -415,43 +469,26 @@ class AtmosOrder(TimeStampedModel):
                 .first()
             )
             if active_subscription:
-                if active_subscription.expires_at is None:
-                    return active_subscription  # already lifetime
-                if duration_delta is None:
-                    active_subscription.expires_at = None
-                else:
-                    active_subscription.expires_at = (
-                        active_subscription.expires_at + duration_delta
-                    )
-                if order.plan_id:
-                    active_subscription.plan = order.plan
-                if order.bound_card_id:
-                    active_subscription.bound_card = order.bound_card
-                    active_subscription.auto_renew = True
-                active_subscription.source = UserPremiumSubscription.Source.PAYMENT
-                active_subscription.source_order = order
-                active_subscription.save(
-                    update_fields=(
-                        "expires_at",
-                        "plan",
-                        "bound_card",
-                        "auto_renew",
-                        "source",
-                        "source_order",
-                        "updated_at",
-                    )
-                )
-                return active_subscription
+                return _apply_payment_extension(active_subscription)
 
-            # No active coverage: stop any stale auto-renew rows (e.g. an expired
-            # period being renewed late) so they are not charged twice, then start
-            # a fresh period from now.
+            # Late auto-renewal: extend the expired period row instead of duplicating.
+            if order.is_auto_renewal:
+                renewal_target = (
+                    UserPremiumSubscription.objects.select_for_update()
+                    .filter(user=order.user, is_active=True, expires_at__lte=now)
+                    .order_by("-expires_at")
+                    .first()
+                )
+                if renewal_target:
+                    return _apply_payment_extension(renewal_target)
+
+            # No active coverage: start a fresh period from now.
             UserPremiumSubscription.objects.filter(
                 user=order.user, is_active=True, auto_renew=True
             ).update(auto_renew=False)
             starts_at = now
             expires_at = None if duration_delta is None else starts_at + duration_delta
-            return UserPremiumSubscription.objects.create(
+            subscription = UserPremiumSubscription.objects.create(
                 user=order.user,
                 plan=order.plan,
                 starts_at=starts_at,
@@ -462,6 +499,8 @@ class AtmosOrder(TimeStampedModel):
                 source=UserPremiumSubscription.Source.PAYMENT,
                 source_order=order,
             )
+            UserPremiumSubscription.deactivate_superseded(order.user, keep_pk=subscription.pk)
+            return subscription
 
     @classmethod
     def create_for_plan(cls, user, plan):
