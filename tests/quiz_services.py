@@ -64,6 +64,8 @@ def _needs_subscription(user, answered_count, free_limit):
         return False
     if user.has_active_premium():
         return False
+    if user.free_tests_taken >= free_limit:
+        return True
     if user.quiz_round > 1:
         return True
     return answered_count >= free_limit
@@ -99,7 +101,7 @@ def get_next_question(user):
     if progress["is_round_complete"]:
         raise QuizCompleted()
 
-    if progress["needs_subscription"]:
+    if progress["needs_subscription"] or _free_tier_exhausted(user):
         raise PaymentRequired("Subscription is required to continue.")
 
     answered_ids = get_answered_test_ids(user)
@@ -129,7 +131,7 @@ def submit_quiz_answer(*, user, test_id, answer_id):
         raise ValidationError("This question is already completed.")
 
     progress = get_quiz_progress(user)
-    if progress["needs_subscription"]:
+    if progress["needs_subscription"] or _free_tier_exhausted(user):
         raise PaymentRequired("Subscription is required to continue.")
 
     test = _question_queryset().filter(id=test_id).first()
