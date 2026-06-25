@@ -254,9 +254,19 @@ sudo systemctl daemon-reload
 python manage.py charge_due_subscriptions --dry-run
 ```
 
-**Вернуть прод:** убрать `DEENIFY_TEST_MONTHLY_RENEWAL_MINUTES` из `.env` (или `=0`),
+**Вернуть прод** (после теста):
+
+```bash
+cd /var/www/deenify
+git pull
+bash deploy/scripts/revert-billing-production.sh
+```
+
+Или вручную: убрать `DEENIFY_TEST_MONTHLY_RENEWAL_MINUTES` из `.env` (или `=0`),
 `sudo systemctl disable --now deenify-billing-test.timer`,
-`sudo systemctl enable --now deenify-billing.timer`, перезапустить сервисы.
+`sudo systemctl enable --now deenify-billing.timer`, `sudo systemctl restart deenify-web`.
+
+Следующее автопродление добавит **30 дней** (месяц) или **365 дней** (год) к текущему `expires_at`.
 
 Проверка вручную (без списания — только список должников):
 
