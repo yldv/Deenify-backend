@@ -1016,6 +1016,14 @@ def start_card_binding(*, card_number, expiry):
     }
 
 
+def _delete_other_bound_cards(user, *, keep_pk=None):
+    """Keep at most one active bound card row per user."""
+    qs = BoundCard.objects.filter(user=user)
+    if keep_pk is not None:
+        qs = qs.exclude(pk=keep_pk)
+    qs.delete()
+
+
 def confirm_card_binding(*, user, transaction_id, otp):
     """Confirm card linking with the SMS code and persist a BoundCard for the user."""
     service = AtmosPaymentService()
@@ -1046,9 +1054,7 @@ def confirm_card_binding(*, user, transaction_id, otp):
             phone=str(data.get("phone") or ""),
             is_active=True,
         )
-        BoundCard.objects.filter(user=user, is_active=True).exclude(pk=bound.pk).update(
-            is_active=False
-        )
+        _delete_other_bound_cards(user, keep_pk=bound.pk)
     return {"ok": True, "bound_card": bound, "raw": raw}
 
 
@@ -1606,7 +1612,6 @@ def process_atmos_callback(payload):
     if order.status not in (
         AtmosOrder.Status.CREATED,
         AtmosOrder.Status.PENDING,
-        AtmosOrder.Status.FAILED,
     ):
         logger.warning(
             "Atmos callback rejected: order %s status=%s",
@@ -1632,9 +1637,6 @@ def process_atmos_callback(payload):
         order.atmos_transaction_id = str(transaction_id)
         update_fields.append("atmos_transaction_id")
     if order.status == AtmosOrder.Status.CREATED:
-        order.status = AtmosOrder.Status.PENDING
-        update_fields.append("status")
-    elif order.status == AtmosOrder.Status.FAILED:
         order.status = AtmosOrder.Status.PENDING
         update_fields.append("status")
     order.save(update_fields=update_fields)

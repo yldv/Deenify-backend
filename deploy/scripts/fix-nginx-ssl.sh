@@ -15,7 +15,7 @@ cd "$APP_ROOT"
 echo "==> Copy nginx site + Atmos snippet"
 cp deploy/nginx/deenify.conf "/etc/nginx/sites-available/deenify"
 mkdir -p /etc/nginx/snippets
-cp deploy/nginx/atmos-checkout-proxy.conf /etc/nginx/snippets/atmos-checkout-proxy.conf
+cp deploy/nginx/atmos-checkout-proxy.prod.conf /etc/nginx/snippets/atmos-checkout-proxy.prod.conf
 ln -sf /etc/nginx/sites-available/deenify /etc/nginx/sites-enabled/deenify
 
 if [[ ! -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]]; then

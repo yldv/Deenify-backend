@@ -15,11 +15,14 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.db.models import Q
+from django.db import transaction
 from django.utils import timezone
 
-from users.models import UserPremiumSubscription
+from users.models import AtmosOrder, UserPremiumSubscription
 from users.services import charge_subscription
+
+# Skip a new renewal charge while another auto-renewal order is still in flight.
+RENEWAL_IN_FLIGHT_HOURS = 6
 
 
 class Command(BaseCommand):
@@ -44,10 +47,10 @@ class Command(BaseCommand):
         fail_grace = getattr(settings, "ATMOS_RENEW_FAIL_GRACE_DAYS", 3)
         now = timezone.now()
         threshold = now + timedelta(days=lead_days)
+        in_flight_since = now - timedelta(hours=RENEWAL_IN_FLIGHT_HOURS)
 
-        due = (
-            UserPremiumSubscription.objects.select_related("user", "plan", "bound_card")
-            .filter(
+        due_ids = list(
+            UserPremiumSubscription.objects.filter(
                 is_active=True,
                 auto_renew=True,
                 plan__isnull=False,
@@ -55,38 +58,79 @@ class Command(BaseCommand):
                 expires_at__lte=threshold,
             )
             .order_by("expires_at")
+            .values_list("pk", flat=True)
         )
 
-        total = due.count()
-        self.stdout.write(f"Found {total} subscription(s) due for renewal (<= {threshold:%Y-%m-%d %H:%M}).")
+        self.stdout.write(
+            f"Found {len(due_ids)} subscription(s) due for renewal (<= {threshold:%Y-%m-%d %H:%M})."
+        )
         charged = failed = skipped = 0
 
-        for subscription in due:
-            user = subscription.user
-            card = subscription.bound_card
-            label = f"user={user.telegram_id} sub={subscription.pk}"
+        for subscription_id in due_ids:
+            charge_target = None
+            label = ""
 
-            if not card or not card.is_active or not card.card_token:
-                self.stdout.write(f"  SKIP {label}: no active bound card; disabling auto-renew.")
-                if not dry_run:
-                    subscription.auto_renew = False
-                    subscription.save(update_fields=("auto_renew", "updated_at"))
-                skipped += 1
+            with transaction.atomic():
+                subscription = (
+                    UserPremiumSubscription.objects.select_for_update()
+                    .select_related("user", "plan", "bound_card")
+                    .filter(
+                        pk=subscription_id,
+                        is_active=True,
+                        auto_renew=True,
+                        plan__isnull=False,
+                        expires_at__isnull=False,
+                        expires_at__lte=threshold,
+                    )
+                    .first()
+                )
+                if not subscription:
+                    continue
+
+                user = subscription.user
+                card = subscription.bound_card
+                label = f"user={user.telegram_id} sub={subscription.pk}"
+
+                if not card or not card.is_active or not card.card_token:
+                    self.stdout.write(f"  SKIP {label}: no active bound card; disabling auto-renew.")
+                    if not dry_run:
+                        subscription.auto_renew = False
+                        subscription.save(update_fields=("auto_renew", "updated_at"))
+                    skipped += 1
+                    continue
+
+                in_flight = AtmosOrder.objects.filter(
+                    user=user,
+                    is_auto_renewal=True,
+                    status__in=(AtmosOrder.Status.CREATED, AtmosOrder.Status.PENDING),
+                    created_at__gte=in_flight_since,
+                ).exists()
+                if in_flight:
+                    self.stdout.write(f"  SKIP {label}: renewal payment already in progress.")
+                    skipped += 1
+                    continue
+
+                if dry_run:
+                    self.stdout.write(
+                        f"  DUE  {label} plan={subscription.plan_id} "
+                        f"expires={subscription.expires_at:%Y-%m-%d}"
+                    )
+                    continue
+
+                charge_target = (user, subscription.plan, card, subscription)
+
+            if not charge_target:
                 continue
 
-            if dry_run:
-                self.stdout.write(f"  DUE  {label} plan={subscription.plan_id} expires={subscription.expires_at:%Y-%m-%d}")
-                continue
-
+            user, plan, card, subscription = charge_target
             result = charge_subscription(
                 user=user,
-                plan=subscription.plan,
+                plan=plan,
                 bound_card=card,
                 is_auto_renewal=True,
             )
+
             if result.get("ok"):
-                # mark_as_paid already extended the active period (or rotated a fresh
-                # one and disabled the stale row), so do not touch auto_renew here.
                 charged += 1
                 self.stdout.write(self.style.SUCCESS(f"  OK   {label}: renewed."))
                 continue

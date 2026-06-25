@@ -150,29 +150,24 @@ class UserPremiumSubscriptionAdmin(admin.ModelAdmin):
 
 @admin.register(BoundCard)
 class BoundCardAdmin(admin.ModelAdmin):
-    list_display = ("user", "masked_pan", "card_id", "expiry", "card_status", "created_at", "removed_at")
-    list_filter = ("is_active", "created_at")
+    list_display = ("user", "masked_pan", "card_id", "expiry", "created_at")
+    list_filter = ("created_at",)
     search_fields = ("user__telegram_id", "user__username", "card_id", "masked_pan")
-    readonly_fields = ("created_at", "updated_at", "removed_at", "card_token")
+    readonly_fields = ("created_at", "updated_at", "card_token")
     autocomplete_fields = ("user",)
     ordering = ("-created_at",)
     actions = ("delete_inactive_cards",)
 
-    @admin.display(description="Holat", ordering="is_active")
-    def card_status(self, obj):
-        return "Faol" if obj.is_active else "Uzilgan"
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(is_active=True)
 
-    @admin.action(description="Tanlangan uzilgan kartalarni o'chirish")
-    def delete_inactive_cards(modeladmin, request, queryset):
-        inactive = queryset.filter(is_active=False)
-        count = inactive.count()
+    @admin.action(description="Barcha uzilgan (faol emas) kartalarni o'chirish")
+    def delete_inactive_cards(self, request, queryset):
+        count, _ = BoundCard.objects.filter(is_active=False).delete()
         if not count:
-            modeladmin.message_user(
-                request, "Tanlovda uzilgan kartalar yo'q.", level="warning"
-            )
+            self.message_user(request, "Uzilgan kartalar yo'q.", level="warning")
             return
-        inactive.delete()
-        modeladmin.message_user(request, f"{count} ta uzilgan karta o'chirildi.")
+        self.message_user(request, f"{count} ta uzilgan karta o'chirildi.")
 
 
 @admin.register(Feedback)

@@ -8,8 +8,11 @@ async def get_language(state: FSMContext) -> str:
     return normalize_language(data.get("language", "uz"))
 
 
-async def preserve_language(state: FSMContext) -> str:
-    language = await get_language(state)
+async def preserve_language(state: FSMContext, language: str | None = None) -> str:
+    if language is None:
+        language = await get_language(state)
+    else:
+        language = normalize_language(language)
     await state.clear()
     await state.update_data(language=language)
     return language

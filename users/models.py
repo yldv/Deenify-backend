@@ -172,9 +172,8 @@ class BoundCard(TimeStampedModel):
         return f"{self.masked_pan or self.card_id} ({self.user})"
 
     def mark_removed(self):
-        self.is_active = False
-        self.removed_at = timezone.now()
-        self.save(update_fields=("is_active", "removed_at", "updated_at"))
+        """Remove card record (only active cards are kept in the database)."""
+        self.delete()
 
 
 class SubscriptionPlan(TimeStampedModel):

@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from bot.api_client import ApiClientError, NotFoundError
+from bot.context import preserve_language
 from bot.handlers.common import resolve_is_premium, show_home_menu, user_full_name
 from bot.handlers.settings import show_settings_menu
 from bot.keyboards import home_keyboard, language_keyboard, phone_keyboard
@@ -66,8 +67,7 @@ async def start_command(
                 )
             except ApiClientError:
                 logger.warning("Failed to attach referrer for registered user")
-        await state.update_data(language=language)
-        await state.clear()
+        await preserve_language(state, language)
         await show_home_menu(message, language, is_premium=bool(user.get("is_premium")))
         return
 
@@ -99,7 +99,7 @@ async def language_selected(message: Message, state: FSMContext, api_client):
             if return_to == "settings":
                 await show_settings_menu(message, state, language, is_premium=is_premium)
             else:
-                await state.clear()
+                await preserve_language(state, language)
                 await show_home_menu(message, language, is_premium=is_premium)
         else:
             await api_client.get_or_create_user(

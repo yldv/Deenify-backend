@@ -19,13 +19,21 @@ async def phone_received(message: Message, state: FSMContext, api_client):
     data = await state.get_data()
     language = normalize_language(data.get("language", "uz"))
 
+    contact = message.contact
+    if not contact or contact.user_id != message.from_user.id:
+        await message.answer(
+            get_text(language, "phone_invalid"),
+            reply_markup=phone_keyboard(language),
+        )
+        return
+
     try:
         await api_client.get_or_create_user(
             telegram_id=message.from_user.id,
             full_name=user_full_name(message),
             username=message.from_user.username or "",
             language=language,
-            phone_number=message.contact.phone_number,
+            phone_number=contact.phone_number,
         )
     except ApiClientError as exc:
         logger.exception(
