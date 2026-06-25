@@ -2,6 +2,7 @@
 Description=Run Deenify recurring billing every 2 minutes (test auto-renewal)
 
 [Timer]
+Unit=deenify-billing.service
 OnBootSec=1min
 OnUnitActiveSec=2min
 AccuracySec=5s

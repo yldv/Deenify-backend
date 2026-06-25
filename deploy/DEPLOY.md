@@ -236,6 +236,15 @@ sudo systemctl enable --now deenify-billing-test.timer
 sudo systemctl list-timers deenify-billing-test.timer
 ```
 
+Таймер `deenify-billing-test.timer` запускает уже существующий `deenify-billing.service`
+(отдельный `deenify-billing-test.service` не нужен). Если `deenify-billing.service` ещё не
+установлен:
+
+```bash
+sudo cp deploy/systemd/deenify-billing.service /etc/systemd/system/
+sudo systemctl daemon-reload
+```
+
 Купить **новую** месячную подписку (старая с `expires_at` через месяц не подойдёт). Через ~15 минут
 `charge_due_subscriptions` спишет карту и продлит период ещё на 15 минут.
 
