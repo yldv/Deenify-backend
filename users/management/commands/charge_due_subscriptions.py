@@ -71,6 +71,7 @@ class Command(BaseCommand):
                 is_active=True,
                 auto_renew=True,
                 plan__isnull=False,
+                bound_card_id__isnull=False,
                 expires_at__isnull=False,
                 expires_at__lte=threshold,
             )
@@ -89,13 +90,14 @@ class Command(BaseCommand):
 
             with transaction.atomic():
                 subscription = (
-                    UserPremiumSubscription.objects.select_for_update()
-                    .select_related("user", "plan", "bound_card")
+                    UserPremiumSubscription.objects.select_for_update(of=("self",))
+                    .select_related("user", "plan")
                     .filter(
                         pk=subscription_id,
                         is_active=True,
                         auto_renew=True,
                         plan__isnull=False,
+                        bound_card_id__isnull=False,
                         expires_at__isnull=False,
                         expires_at__lte=threshold,
                     )

@@ -458,7 +458,10 @@ class AtmosCardApplyView(APIView):
             )
 
         charge = charge_subscription(
-            user=user, plan=plan, bound_card=bind_result["bound_card"], is_auto_renewal=False
+            user=user,
+            plan=plan,
+            card_data=bind_result["card_data"],
+            is_auto_renewal=False,
         )
         if not charge.get("ok"):
             return Response(

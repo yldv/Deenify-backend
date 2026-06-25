@@ -143,7 +143,7 @@ class ActiveTelegramUser(TelegramUser):
 
 
 class BoundCard(TimeStampedModel):
-    """Atmos card token (tokenized card) used for recurring subscription charges."""
+    """Atmos card token saved only after a successful first charge (apply)."""
 
     user = models.ForeignKey(
         TelegramUser,
