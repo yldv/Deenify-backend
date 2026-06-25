@@ -290,6 +290,16 @@ ATMOS_REFERRAL_BONUS_DAYS_YEARLY = int(
 # and give up auto-renewal (notify the user) after this many days of failed retries.
 ATMOS_RENEW_LEAD_DAYS = int(os.environ.get('ATMOS_RENEW_LEAD_DAYS', '1'))
 ATMOS_RENEW_FAIL_GRACE_DAYS = int(os.environ.get('ATMOS_RENEW_FAIL_GRACE_DAYS', '3'))
+# Test auto-renewal: monthly plan lasts N minutes instead of 30 days (0 = production).
+# Yearly plans are unchanged. Remove or set to 0 after testing.
+DEENIFY_TEST_MONTHLY_RENEWAL_MINUTES = int(
+    os.environ.get('DEENIFY_TEST_MONTHLY_RENEWAL_MINUTES', '0')
+)
+# Used only when DEENIFY_TEST_MONTHLY_RENEWAL_MINUTES > 0 (renew when expiry is within N minutes).
+ATMOS_RENEW_LEAD_MINUTES = int(os.environ.get('ATMOS_RENEW_LEAD_MINUTES', '0'))
+ATMOS_RENEW_FAIL_GRACE_MINUTES = int(
+    os.environ.get('ATMOS_RENEW_FAIL_GRACE_MINUTES', '30')
+)
 # Unpaid Atmos orders older than this are removed by cleanup_stale_atmos_orders (daily timer).
 ATMOS_STALE_ORDER_RETENTION_DAYS = int(
     os.environ.get('ATMOS_STALE_ORDER_RETENTION_DAYS', '1')

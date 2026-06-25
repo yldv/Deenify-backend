@@ -212,6 +212,9 @@ class SubscriptionPlan(TimeStampedModel):
         if self.period == self.BillingPeriod.WEEK:
             return timedelta(weeks=self.duration)
         if self.period == self.BillingPeriod.MONTH:
+            test_minutes = getattr(settings, "DEENIFY_TEST_MONTHLY_RENEWAL_MINUTES", 0)
+            if test_minutes > 0:
+                return timedelta(minutes=test_minutes)
             return timedelta(days=30 * self.duration)
         if self.period == self.BillingPeriod.YEAR:
             return timedelta(days=365 * self.duration)

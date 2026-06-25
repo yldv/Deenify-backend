@@ -43,11 +43,28 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         dry_run = options["dry_run"]
-        lead_days = options["lead_days"]
-        fail_grace = getattr(settings, "ATMOS_RENEW_FAIL_GRACE_DAYS", 3)
         now = timezone.now()
-        threshold = now + timedelta(days=lead_days)
-        in_flight_since = now - timedelta(hours=RENEWAL_IN_FLIGHT_HOURS)
+        test_minutes = getattr(settings, "DEENIFY_TEST_MONTHLY_RENEWAL_MINUTES", 0)
+        if test_minutes > 0:
+            lead_minutes = getattr(settings, "ATMOS_RENEW_LEAD_MINUTES", 0)
+            fail_grace = timedelta(
+                minutes=getattr(settings, "ATMOS_RENEW_FAIL_GRACE_MINUTES", 30)
+            )
+            threshold = now + timedelta(minutes=lead_minutes)
+            in_flight_since = now - timedelta(minutes=max(test_minutes, 15))
+            self.stdout.write(
+                self.style.WARNING(
+                    f"TEST MODE: monthly period={test_minutes} min, "
+                    f"lead={lead_minutes} min, fail_grace={fail_grace}."
+                )
+            )
+        else:
+            lead_days = options["lead_days"]
+            fail_grace = timedelta(
+                days=getattr(settings, "ATMOS_RENEW_FAIL_GRACE_DAYS", 3)
+            )
+            threshold = now + timedelta(days=lead_days)
+            in_flight_since = now - timedelta(hours=RENEWAL_IN_FLIGHT_HOURS)
 
         due_ids = list(
             UserPremiumSubscription.objects.filter(
@@ -138,7 +155,7 @@ class Command(BaseCommand):
             failed += 1
             error = result.get("error") or "unknown error"
             expired_for = now - subscription.expires_at
-            if expired_for > timedelta(days=fail_grace):
+            if expired_for > fail_grace:
                 self.stdout.write(
                     self.style.ERROR(f"  FAIL {label}: {error}; grace exceeded, disabling auto-renew.")
                 )

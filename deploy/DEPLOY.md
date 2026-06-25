@@ -216,6 +216,39 @@ python manage.py cleanup_expired_offer_messages --dry-run
 > **Нужно ли дропать всю БД перед prod?** Обычно **нет**. Достаточно удалить неоплаченные заказы командой выше.
 > Полный сброс (`DROP DATABASE` / `flush`) — только если **все** пользователи и подписки тестовые и их можно потерять.
 
+### Тест автосписания (месячная подписка за 15 минут)
+
+Временно в `.env` (годовая подписка остаётся на 365 дней):
+
+```env
+DEENIFY_TEST_MONTHLY_RENEWAL_MINUTES=15
+ATMOS_RENEW_LEAD_MINUTES=0
+ATMOS_RENEW_FAIL_GRACE_MINUTES=30
+```
+
+Перезапустить web/bot, включить частый таймер вместо ежедневного:
+
+```bash
+sudo cp deploy/systemd/deenify-billing-test.timer /etc/systemd/system/
+sudo systemctl disable --now deenify-billing.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now deenify-billing-test.timer
+sudo systemctl list-timers deenify-billing-test.timer
+```
+
+Купить **новую** месячную подписку (старая с `expires_at` через месяц не подойдёт). Через ~15 минут
+`charge_due_subscriptions` спишет карту и продлит период ещё на 15 минут.
+
+Проверка без списания:
+
+```bash
+python manage.py charge_due_subscriptions --dry-run
+```
+
+**Вернуть прод:** убрать `DEENIFY_TEST_MONTHLY_RENEWAL_MINUTES` из `.env` (или `=0`),
+`sudo systemctl disable --now deenify-billing-test.timer`,
+`sudo systemctl enable --now deenify-billing.timer`, перезапустить сервисы.
+
 Проверка вручную (без списания — только список должников):
 
 ```bash
