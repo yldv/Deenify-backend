@@ -6,7 +6,7 @@ from aiogram.types import Message
 
 from bot.api_client import ApiClientError, NotFoundError
 from bot.context import get_language, preserve_language
-from bot.handlers.common import resolve_is_premium, show_home_menu
+from bot.handlers.common import require_registered_user, resolve_is_premium, show_home_menu
 from bot.handlers.feedback import start_feedback_survey
 from bot.keyboards import home_keyboard, language_keyboard, settings_keyboard
 from bot.services.payment import send_subscription_offers
@@ -30,7 +30,10 @@ async def show_settings_menu(
 
 @router.message(F.text.in_(all_button_texts("settings")))
 async def open_settings(message: Message, state: FSMContext, api_client):
-    language = await get_language(state)
+    registered = await require_registered_user(message, state, api_client)
+    if not registered:
+        return
+    _, language = registered
     is_premium = await resolve_is_premium(api_client, message.from_user.id)
     await show_settings_menu(message, state, language, is_premium=is_premium)
 
@@ -38,19 +41,10 @@ async def open_settings(message: Message, state: FSMContext, api_client):
 @router.message(F.text.in_(all_button_texts("buy_premium_button")))
 async def buy_premium(message: Message, state: FSMContext, api_client):
     """Premium can be purchased at any time, even before the free questions run out."""
-    language = await get_language(state)
-    try:
-        user = await api_client.get_user(telegram_id=message.from_user.id)
-    except NotFoundError:
-        await message.answer(get_text(language, "not_found"), reply_markup=home_keyboard(language))
+    registered = await require_registered_user(message, state, api_client)
+    if not registered:
         return
-    except ApiClientError:
-        logger.exception(
-            "Failed to load user for premium purchase telegram_id=%s",
-            message.from_user.id,
-        )
-        await message.answer(get_text(language, "error"), reply_markup=home_keyboard(language))
-        return
+    user, language = registered
 
     if user.get("is_premium"):
         await message.answer(
@@ -113,7 +107,10 @@ async def show_subscription_status(message: Message, state: FSMContext, api_clie
 
 @router.message(F.text.in_(all_button_texts("settings_invite_friends")))
 async def settings_invite_friends(message: Message, state: FSMContext, api_client):
-    language = await get_language(state)
+    registered = await require_registered_user(message, state, api_client)
+    if not registered:
+        return
+    _, language = registered
     try:
         data = await api_client.get_referral(telegram_id=message.from_user.id)
     except NotFoundError:

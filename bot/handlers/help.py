@@ -6,7 +6,7 @@ from aiogram.types import Message
 
 from bot.config import BotConfig
 from bot.context import get_language, preserve_language
-from bot.handlers.common import resolve_is_premium, show_home_menu
+from bot.handlers.common import require_registered_user, resolve_is_premium, show_home_menu
 from bot.keyboards import cancel_keyboard, help_keyboard, home_keyboard
 from bot.states import HelpState
 from bot.texts import all_button_texts, get_text
@@ -16,8 +16,11 @@ logger = logging.getLogger(__name__)
 
 
 @router.message(F.text.in_(all_button_texts("help")))
-async def open_help(message: Message, state: FSMContext):
-    language = await get_language(state)
+async def open_help(message: Message, state: FSMContext, api_client):
+    registered = await require_registered_user(message, state, api_client)
+    if not registered:
+        return
+    _, language = registered
     await state.set_state(HelpState.menu)
     await message.answer(
         get_text(language, "help_intro"),

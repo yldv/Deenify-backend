@@ -20,11 +20,11 @@ def setup_routers() -> Router:
     router.callback_query.middleware(language_sync)
     router.include_router(feedback_router)
     router.include_router(subscription_router)
+    router.include_router(start_router)
+    router.include_router(registration_router)
     router.include_router(tests_router)
     router.include_router(menu_router)
     router.include_router(settings_router)
-    router.include_router(start_router)
-    router.include_router(registration_router)
     router.include_router(help_router)
     router.include_router(chat_member_router)
     return router

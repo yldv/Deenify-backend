@@ -34,6 +34,7 @@ async def phone_received(message: Message, state: FSMContext, api_client):
             username=message.from_user.username or "",
             language=language,
             phone_number=contact.phone_number,
+            referred_by=data.get("referrer_id"),
         )
     except ApiClientError as exc:
         logger.exception(

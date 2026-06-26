@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery, Message
 
 from bot.api_client import ApiClientError, NotFoundError
 from bot.context import preserve_language
-from bot.handlers.common import resolve_is_premium, show_home_menu, user_full_name
+from bot.handlers.common import require_registered_user, resolve_is_premium, show_home_menu, user_full_name
 from bot.handlers.settings import show_settings_menu
 from bot.keyboards import home_keyboard, language_keyboard, phone_keyboard
 from bot.states import ChoosingLanguage, RegistrationState
@@ -71,6 +71,18 @@ async def start_command(
         await show_home_menu(message, language, is_premium=bool(user.get("is_premium")))
         return
 
+    if user:
+        language = normalize_language(user.get("language", "uz"))
+        await state.set_state(RegistrationState.waiting_for_phone)
+        await state.update_data(language=language)
+        if referrer_id:
+            await state.update_data(referrer_id=referrer_id)
+        await message.answer(
+            get_text(language, "phone_prompt"),
+            reply_markup=phone_keyboard(language),
+        )
+        return
+
     await state.set_state(ChoosingLanguage.language)
     if referrer_id:
         await state.update_data(referrer_id=referrer_id)
@@ -85,15 +97,20 @@ async def language_selected(message: Message, state: FSMContext, api_client):
     language = normalize_language(LANGUAGE_BUTTON_TO_CODE_UI[message.text])
     telegram_id = message.from_user.id
     data = await state.get_data()
-    is_changing = bool(data.get("language"))
 
     try:
-        if is_changing:
+        try:
+            existing = await api_client.get_user(telegram_id=telegram_id)
+        except NotFoundError:
+            existing = None
+
+        is_registered = bool(existing and existing.get("is_registered"))
+        return_to = data.get("return_to")
+
+        if is_registered:
             user = await api_client.change_language(telegram_id=telegram_id, language=language)
             language = normalize_language(user.get("language", language))
-            await state.update_data(language=language)
-            return_to = data.get("return_to")
-            await state.update_data(return_to=None)
+            await state.update_data(language=language, return_to=None)
             await message.answer(get_text(language, "language_updated"))
             is_premium = bool(user.get("is_premium"))
             if return_to == "settings":
@@ -109,7 +126,7 @@ async def language_selected(message: Message, state: FSMContext, api_client):
                 language=language,
                 referred_by=data.get("referrer_id"),
             )
-            await state.update_data(language=language, referrer_id=None)
+            await state.update_data(language=language, referrer_id=None, return_to=None)
             await state.set_state(RegistrationState.waiting_for_phone)
             await message.answer(
                 get_text(language, "phone_prompt"),
@@ -138,8 +155,19 @@ async def invalid_language(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "back_menu")
 async def back_to_menu(callback: CallbackQuery, state: FSMContext, api_client):
-    data = await state.get_data()
-    language = normalize_language(data.get("language", "uz"))
+    if not callback.message or not callback.from_user:
+        await callback.answer()
+        return
+    registered = await require_registered_user(
+        callback.message,
+        state,
+        api_client,
+        telegram_id=callback.from_user.id,
+    )
+    if not registered:
+        await callback.answer()
+        return
+    _, language = registered
     is_premium = await resolve_is_premium(api_client, callback.from_user.id)
     await callback.message.answer(
         get_text(language, "home_menu"),

@@ -6,7 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, PollAnswer
 
 from bot.context import get_language
-from bot.handlers.common import resolve_is_premium
+from bot.handlers.common import require_registered_user, resolve_is_premium
 from bot.keyboards import home_keyboard
 from bot.poll_sessions import forget_poll, get_poll_session
 from bot.services.quiz import QuizMessenger
@@ -17,7 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 async def _run_take_test(message: Message, state: FSMContext, api_client):
-    language = await get_language(state)
+    registered = await require_registered_user(message, state, api_client)
+    if not registered:
+        return
+    _, language = registered
     await state.clear()
     await state.update_data(language=language)
     quiz = QuizMessenger(api_client)
@@ -32,7 +35,10 @@ async def _run_take_test(message: Message, state: FSMContext, api_client):
 
 
 async def _run_restart_from_start(message: Message, state: FSMContext, api_client):
-    language = await get_language(state)
+    registered = await require_registered_user(message, state, api_client)
+    if not registered:
+        return
+    _, language = registered
     await state.clear()
     await state.update_data(language=language)
     quiz = QuizMessenger(api_client)
