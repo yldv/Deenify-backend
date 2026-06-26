@@ -1,6 +1,6 @@
 from aiogram import Router
 
-from bot.middlewares import LanguageSyncMiddleware
+from bot.middlewares import LanguageSyncMiddleware, RegistrationGuardMiddleware
 
 from .chat_member import router as chat_member_router
 from .feedback import router as feedback_router
@@ -16,8 +16,12 @@ from .tests import router as tests_router
 def setup_routers() -> Router:
     router = Router()
     language_sync = LanguageSyncMiddleware()
+    registration_guard = RegistrationGuardMiddleware()
     router.message.middleware(language_sync)
+    router.message.middleware(registration_guard)
     router.callback_query.middleware(language_sync)
+    router.callback_query.middleware(registration_guard)
+    router.poll_answer.middleware(registration_guard)
     router.include_router(feedback_router)
     router.include_router(subscription_router)
     router.include_router(start_router)
