@@ -22,7 +22,14 @@ def count_poll_ready_answers(test) -> int:
     return sum(1 for answer in test.answers.all() if resolve_localized_text(answer, "text"))
 
 
+def answers_with_empty_text(test):
+    return [answer for answer in test.answers.all() if not resolve_localized_text(answer, "text")]
+
+
 def is_test_poll_ready(test) -> bool:
+    answers = list(test.answers.all())
+    if len(answers) < 2:
+        return False
     if not resolve_localized_text(test, "question"):
         return False
-    return count_poll_ready_answers(test) >= 2
+    return all(resolve_localized_text(answer, "text") for answer in answers)

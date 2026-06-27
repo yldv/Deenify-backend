@@ -41,8 +41,12 @@ class BotQuizQuestionSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        answers = list(data.get("answers", []))
+        answers = [
+            item for item in data.get("answers", [])
+            if (item.get("text") or "").strip()
+        ]
         if len(answers) < 2:
+            data["answers"] = answers
             return data
 
         correct_id = next(
