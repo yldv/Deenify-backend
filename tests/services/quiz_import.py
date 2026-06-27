@@ -163,6 +163,7 @@ def upsert_test(category: TestCategory, item: dict) -> Test:
 
 def upsert_answers(test: Test, answers: list[tuple[bool, dict]]) -> None:
     test.answers.update(is_correct=False)
+    kept_ids: list[int] = []
     for index, (is_correct, text) in enumerate(answers, start=1):
         answer = test.answers.filter(sort_order=index).first()
         defaults = {
@@ -175,7 +176,9 @@ def upsert_answers(test: Test, answers: list[tuple[bool, dict]]) -> None:
                 setattr(answer, field, value)
             answer.save(update_fields=tuple(defaults.keys()) + ("updated_at",))
         else:
-            Answer.objects.create(test=test, **defaults)
+            answer = Answer.objects.create(test=test, **defaults)
+        kept_ids.append(answer.pk)
+    test.answers.exclude(pk__in=kept_ids).delete()
 
 
 @transaction.atomic

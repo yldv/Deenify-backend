@@ -26,7 +26,8 @@ def _language_fieldset(label: str, css_class: str, suffix: str) -> tuple:
 
 class AnswerInline(admin.TabularInline):
     model = Answer
-    extra = 4
+    extra = 0
+    min_num = 2
     fields = ("sort_order", "is_correct", "text_uz", "text_uz_cy", "text_ru")
     verbose_name = "Javob"
     verbose_name_plural = "Javoblar (lotin, kirill, rus — bitta to'g'ri belgilang)"
@@ -36,6 +37,7 @@ class AnswerInline(admin.TabularInline):
 class TestAdmin(admin.ModelAdmin):
     change_list_template = "admin/tests/test_change_list.html"
     list_display = (
+        "id",
         "title",
         "level_badge",
         "is_active",
@@ -44,6 +46,7 @@ class TestAdmin(admin.ModelAdmin):
     )
     list_filter = ("level", "is_active")
     search_fields = (
+        "id",
         "title",
         "title_uz",
         "title_uz_cy",
@@ -110,9 +113,17 @@ class TestAdmin(admin.ModelAdmin):
         instances = formset.save(commit=False)
         for instance in instances:
             if isinstance(instance, Answer):
+                has_text = any(
+                    (getattr(instance, field, None) or "").strip()
+                    for field in ("text", "text_uz", "text_uz_cy", "text_ru")
+                )
+                if not has_text:
+                    if instance.pk:
+                        instance.delete()
+                    continue
                 if instance.text_uz and not instance.text:
                     instance.text = instance.text_uz
-            instance.save()
+                instance.save()
         for obj in formset.deleted_objects:
             obj.delete()
         formset.save_m2m()
@@ -186,9 +197,9 @@ class TestAdmin(admin.ModelAdmin):
 
 @admin.register(Answer)
 class AnswerAdmin(admin.ModelAdmin):
-    list_display = ("text_short", "test", "is_correct", "sort_order")
+    list_display = ("id", "text_short", "test", "is_correct", "sort_order")
     list_filter = ("is_correct", "test__level")
-    search_fields = ("text", "text_uz", "test__title")
+    search_fields = ("id", "text", "text_uz", "test__title", "test__id")
     autocomplete_fields = ("test",)
     fieldsets = (
         ("Savol", {"fields": ("test", "sort_order", "is_correct")}),
