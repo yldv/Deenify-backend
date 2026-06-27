@@ -5,6 +5,7 @@ from django.db.models import Prefetch
 
 from .exceptions import PaymentRequired, QuizCompleted
 from .models import Answer, Test, TestCategory, UserAnsweredTest
+from .services.quiz_content import is_test_poll_ready
 
 
 def _first_round_easy_count():
@@ -118,7 +119,11 @@ def get_next_question(user):
     else:
         pool = queryset
 
-    return pool.order_by("?").first()
+    candidates = list(pool.order_by("?")[:20])
+    for test in candidates:
+        if is_test_poll_ready(test):
+            return test
+    raise QuizCompleted()
 
 
 @transaction.atomic

@@ -1,6 +1,8 @@
 from aiogram import Bot
 from aiogram.enums import PollType
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
+import logging
 
 from bot.api_client import ApiClientError, BlockedUserError, NotFoundError, PaymentRequiredError
 from bot.keyboards import home_keyboard  # used by quiz_reply_keyboard
@@ -10,6 +12,8 @@ from bot.states import TakingTest
 from bot.texts import get_text
 from bot.uz_cyrillic import localize_quiz_content
 from core.constants import API_ROUND_COMPLETE
+
+logger = logging.getLogger(__name__)
 
 POLL_QUESTION_LIMIT = 300
 POLL_OPTION_LIMIT = 100
@@ -36,6 +40,19 @@ def build_poll_explanation(description: str) -> str | None:
     """Poll explanation: manba only; Telegram shows it on wrong answers."""
     source = (description or "").strip()
     return clip_text(source, POLL_EXPLANATION_LIMIT) if source else None
+
+
+def build_poll_question_text(question: dict) -> str:
+    text = clip_text(question.get("question", ""), POLL_QUESTION_LIMIT)
+    return text or "?"
+
+
+def build_poll_options(answers: list[dict]) -> list[str]:
+    options = []
+    for index, answer in enumerate(answers):
+        text = clip_text(answer.get("text", ""), POLL_OPTION_LIMIT)
+        options.append(text or f"Variant {index + 1}")
+    return options
 
 
 def quiz_reply_keyboard(language: str, *, is_premium: bool = False):
@@ -144,17 +161,51 @@ class QuizMessenger:
             reply_markup=keyboard,
         )
 
-        # is_anonymous=False is required: Telegram does not send poll_answer for anonymous polls.
-        poll_message = await bot.send_poll(
-            chat_id,
-            question=clip_text(question["question"], POLL_QUESTION_LIMIT),
-            options=[clip_text(answer["text"], POLL_OPTION_LIMIT) for answer in answers],
-            type=PollType.QUIZ,
-            correct_option_id=int(question.get("correct_option_index", 0)),
-            is_anonymous=False,
-            explanation=build_poll_explanation(question.get("description", "")),
-            reply_markup=keyboard,
-        )
+        question_text = build_poll_question_text(question)
+        options = build_poll_options(answers)
+        if len(options) < 2:
+            logger.error(
+                "Quiz poll has fewer than 2 options: test_id=%s answers=%s",
+                question.get("id"),
+                len(options),
+            )
+            return await self.load_next(
+                bot=bot,
+                chat_id=chat_id,
+                state=state,
+                telegram_id=telegram_id,
+                language=language,
+            )
+
+        poll_kwargs = {
+            "chat_id": chat_id,
+            "question": question_text,
+            "options": options,
+            "type": PollType.QUIZ,
+            "correct_option_id": int(question.get("correct_option_index", 0)),
+            "is_anonymous": False,
+            "reply_markup": keyboard,
+        }
+        explanation = build_poll_explanation(question.get("description", ""))
+        if explanation:
+            poll_kwargs["explanation"] = explanation
+
+        try:
+            poll_message = await bot.send_poll(**poll_kwargs)
+        except TelegramBadRequest:
+            logger.exception(
+                "send_poll failed test_id=%s question=%r options=%r",
+                question.get("id"),
+                question_text,
+                options,
+            )
+            return await self.load_next(
+                bot=bot,
+                chat_id=chat_id,
+                state=state,
+                telegram_id=telegram_id,
+                language=language,
+            )
 
         poll_id = str(poll_message.poll.id)
         remember_poll(
