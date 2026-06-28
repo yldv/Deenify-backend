@@ -37,8 +37,8 @@ class AnswerInline(admin.TabularInline):
 class TestAdmin(admin.ModelAdmin):
     change_list_template = "admin/tests/test_change_list.html"
     list_display = (
-        "id",
         "title",
+        "id",
         "level_badge",
         "is_active",
         "sort_order",
@@ -197,7 +197,7 @@ class TestAdmin(admin.ModelAdmin):
 
 @admin.register(Answer)
 class AnswerAdmin(admin.ModelAdmin):
-    list_display = ("id", "text_short", "test", "is_correct", "sort_order")
+    list_display = ("text_short", "id", "test", "is_correct", "sort_order")
     list_filter = ("is_correct", "test__level")
     search_fields = ("id", "text", "text_uz", "test__title", "test__id")
     autocomplete_fields = ("test",)
