@@ -1,7 +1,26 @@
-/* Deenify admin — yorqin sarlavhalar, uyg'un stat kartalar */
+/* Deenify admin — dashboard, navbar, light/dark */
+
+/* Top navbar — icons visible in both schemes */
+html[data-bs-theme="light"] #jazzy-navbar .nav-link,
+html[data-bs-theme="light"] #jazzy-navbar .nav-link i,
+html[data-bs-theme="light"] #jazzy-navbar .btn-navbar {
+  color: #334155 !important;
+}
+
+html[data-bs-theme="light"] #jazzy-navbar .form-control-navbar {
+  color: #1e293b;
+  background-color: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+html[data-bs-theme="dark"] #jazzy-navbar .nav-link,
+html[data-bs-theme="dark"] #jazzy-navbar .nav-link i,
+html[data-bs-theme="dark"] #jazzy-navbar .btn-navbar {
+  color: #e2e8f0 !important;
+}
 
 .deenify-dashboard .section-title {
-  color: #f1f5f9 !important;
+  color: #1e293b !important;
   font-weight: 700;
   font-size: 1.15rem;
   margin-bottom: 1.25rem;
@@ -9,7 +28,7 @@
 }
 
 .deenify-dashboard .section-title i {
-  color: #63b3ed !important;
+  color: #2563eb !important;
   margin-right: 0.35rem;
 }
 
@@ -198,8 +217,8 @@
   padding: 0.65rem 0;
   padding-left: 2rem;
   position: relative;
-  color: #e2e8f0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: #334155;
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .deenify-import-page .import-steps li:last-child {
@@ -224,32 +243,32 @@
 
 .deenify-import-page label,
 .deenify-import-page .lead {
-  color: #e2e8f0;
+  color: #1e293b;
 }
 
 .deenify-import-page .form-text {
-  color: #a0aec0 !important;
+  color: #64748b !important;
 }
 
 .deenify-import-page .form-control {
-  background: #2d3748;
-  border-color: #4a5568;
-  color: #f7fafc;
+  background: #fff;
+  border-color: #cbd5e1;
+  color: #1e293b;
 }
 
 .deenify-import-page .card-secondary .card-header {
-  background: #2d3748;
-  color: #f7fafc;
+  background: #e2e8f0;
+  color: #1e293b;
 }
 
 .deenify-import-page .hint-list {
-  color: #cbd5e0;
+  color: #475569;
   margin-bottom: 1rem;
 }
 
 .deenify-import-page .hint-list code {
-  background: #4a5568;
-  color: #90cdf4;
+  background: #e2e8f0;
+  color: #1d4ed8;
   padding: 0.15rem 0.4rem;
   border-radius: 4px;
 }
@@ -281,6 +300,10 @@ html[data-bs-theme="dark"] .deenify-dashboard .section-title {
   color: #e2e8f0 !important;
 }
 
+html[data-bs-theme="dark"] .deenify-dashboard .section-title i {
+  color: #63b3ed !important;
+}
+
 html[data-bs-theme="dark"] .deenify-dashboard .chart-wrap {
   background: #1e293b;
 }
@@ -294,8 +317,36 @@ html[data-bs-theme="dark"] .deenify-dashboard .section-card .card-header {
   color: #f1f5f9;
 }
 
+html[data-bs-theme="dark"] .deenify-import-page .import-steps li {
+  color: #e2e8f0;
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+html[data-bs-theme="dark"] .deenify-import-page label,
+html[data-bs-theme="dark"] .deenify-import-page .lead {
+  color: #e2e8f0;
+}
+
+html[data-bs-theme="dark"] .deenify-import-page .form-text {
+  color: #a0aec0 !important;
+}
+
 html[data-bs-theme="dark"] .deenify-import-page .form-control {
   background: #1e293b;
   border-color: #475569;
   color: #f8fafc;
+}
+
+html[data-bs-theme="dark"] .deenify-import-page .card-secondary .card-header {
+  background: #2d3748;
+  color: #f7fafc;
+}
+
+html[data-bs-theme="dark"] .deenify-import-page .hint-list {
+  color: #cbd5e0;
+}
+
+html[data-bs-theme="dark"] .deenify-import-page .hint-list code {
+  background: #4a5568;
+  color: #90cdf4;
 }

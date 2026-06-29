@@ -59,7 +59,7 @@ JAZZMIN_SETTINGS = {
 JAZZMIN_UI_TWEAKS = {
     "theme": "cerulean",
     "default_theme_mode": "light",
-    "navbar": "navbar-dark navbar-primary",
+    "navbar": "",
     "sidebar": "sidebar-dark-primary elevation-4",
     "accent": "accent-primary",
     "brand_colour": "navbar-primary",
