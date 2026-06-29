@@ -275,3 +275,27 @@
   background: transparent;
   padding: 0;
 }
+
+/* Dark mode — custom dashboard / import blocks */
+html[data-bs-theme="dark"] .deenify-dashboard .section-title {
+  color: #e2e8f0 !important;
+}
+
+html[data-bs-theme="dark"] .deenify-dashboard .chart-wrap {
+  background: #1e293b;
+}
+
+html[data-bs-theme="dark"] .deenify-dashboard .section-card {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+html[data-bs-theme="dark"] .deenify-dashboard .section-card .card-header {
+  background: #334155;
+  color: #f1f5f9;
+}
+
+html[data-bs-theme="dark"] .deenify-import-page .form-control {
+  background: #1e293b;
+  border-color: #475569;
+  color: #f8fafc;
+}

@@ -44,7 +44,9 @@ JAZZMIN_SETTINGS = {
     "custom_js": None,
     "use_google_fonts_cdn": True,
     "show_ui_builder": False,
+    "show_theme_chooser": True,
     "changeform_format": "horizontal_tabs",
+    
     "changeform_format_overrides": {
         "users.telegramuser": "collapsible",
         "tests.test": "collapsible",
@@ -56,7 +58,7 @@ JAZZMIN_SETTINGS = {
 
 JAZZMIN_UI_TWEAKS = {
     "theme": "cerulean",
-    "dark_mode_theme": None,
+    "default_theme_mode": "light",
     "navbar": "navbar-dark navbar-primary",
     "sidebar": "sidebar-dark-primary elevation-4",
     "accent": "accent-primary",
