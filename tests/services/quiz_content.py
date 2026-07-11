@@ -1,17 +1,32 @@
 """Resolve quiz text with language fallbacks (uz / ru / uz_cy)."""
 
+from django.utils.translation import get_language
 
-def resolve_localized_text(obj, field_name: str) -> str:
-    """Return the first non-empty translation for a model field."""
-    candidates = (
-        field_name,
-        f"{field_name}_uz",
-        f"{field_name}_ru",
-        f"{field_name}_uz_cy",
+
+def resolve_localized_text(obj, field_name: str, language: str | None = None) -> str:
+    """Return the best non-empty translation for a model field.
+
+    When ``language`` is set (or active via translation.override), prefer that
+    language's field first so uz_cy from admin is not overwritten by Latin uz.
+    """
+    lang = (language or get_language() or "").replace("-", "_")
+    preferred = []
+    if lang:
+        preferred.append(f"{field_name}_{lang}")
+    preferred.extend(
+        (
+            field_name,
+            f"{field_name}_uz",
+            f"{field_name}_ru",
+            f"{field_name}_uz_cy",
+        )
     )
-    for name in candidates:
-        if not hasattr(obj, name):
+
+    seen = set()
+    for name in preferred:
+        if name in seen or not hasattr(obj, name):
             continue
+        seen.add(name)
         value = (getattr(obj, name, None) or "").strip()
         if value:
             return value

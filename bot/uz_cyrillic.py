@@ -1,5 +1,8 @@
 """Uzbek Latin to Cyrillic transliteration for bot UI (uz_cy language)."""
 
+import re
+
+# Digraphs / special letters must run before single-char Y→Й mapping.
 _MULTI_REPLACEMENTS = (
     ("Ng", "Нг"),
     ("NG", "НГ"),
@@ -11,13 +14,30 @@ _MULTI_REPLACEMENTS = (
     ("CH", "Ч"),
     ("ch", "ч"),
     ("O‘", "Ў"),
+    ("Oʻ", "Ў"),
     ("O'", "Ў"),
     ("o‘", "ў"),
+    ("oʻ", "ў"),
     ("o'", "ў"),
     ("G‘", "Ғ"),
+    ("Gʻ", "Ғ"),
     ("G'", "Ғ"),
     ("g‘", "ғ"),
+    ("gʻ", "ғ"),
     ("g'", "ғ"),
+    # Ye/Yo/Yu/Ya → Е/Ё/Ю/Я (not Йе/Йо/Йу/Йа)
+    ("Ye", "Е"),
+    ("YE", "Е"),
+    ("ye", "е"),
+    ("Yo", "Ё"),
+    ("YO", "Ё"),
+    ("yo", "ё"),
+    ("Yu", "Ю"),
+    ("YU", "Ю"),
+    ("yu", "ю"),
+    ("Ya", "Я"),
+    ("YA", "Я"),
+    ("ya", "я"),
 )
 
 _CHAR_MAP = {
@@ -75,9 +95,17 @@ _CHAR_MAP = {
     "w": "в",
 }
 
+_CYRILLIC_RE = re.compile(r"[\u0400-\u04FF]")
+
+
+def looks_cyrillic(text: str) -> bool:
+    return bool(text and _CYRILLIC_RE.search(text))
+
 
 def latin_to_cyrillic(text: str) -> str:
     if not text:
+        return text
+    if looks_cyrillic(text):
         return text
     result = text
     for latin, cyrillic in _MULTI_REPLACEMENTS:
