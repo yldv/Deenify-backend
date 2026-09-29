@@ -89,9 +89,12 @@ git clone https://github.com/ВАШ_АККАУНТ/Deenify-backend.git .
 Или с Mac:
 
 ```bash
-rsync -avz --exclude .venv --exclude db.sqlite3 --exclude __pycache__ --exclude staticfiles \
+rsync -avz --exclude .venv --exclude venv --exclude db.sqlite3 --exclude __pycache__ --exclude staticfiles \
   ./ deenify@IP_СЕРВЕРА:/var/www/deenify/
 ```
+
+> `venv`/`Scripts` (Windows-venv) исключаем обязательно: venv пересоздаётся на
+> сервере командой ниже, иначе `ExecStart` падает с `203/EXEC`.
 
 ```bash
 cd /var/www/deenify
@@ -143,6 +146,10 @@ sudo systemctl enable deenify-web deenify-bot
 sudo systemctl start deenify-web deenify-bot
 sudo systemctl status deenify-web deenify-bot
 ```
+
+> Юнит-файллар номи **`deenify-web`** ва **`deenify-bot`**. Агар серверда
+> `deenify.service` деган ўринга бор (қўлда ёзилган ёки эски версия) — у ўрнига
+> ўша иккисини ўрнатинг ва `deenify.service` ни ўчиринг.
 
 Логи бота:
 
@@ -404,6 +411,77 @@ crontab -e
 ```
 0 3 * * * pg_dump -U deenify_user deenify_db > /home/deenify/backups/deenify_$(date +\%F).sql
 ```
+
+---
+
+## Troubleshooting: `status=203/EXEC`
+
+`203/EXEC` — systemd `ExecStart` dagi faylni **ishga tushira olmadi**: fayl yo'q,
+`+x` yo'q, yoki shebang noto'g'ri. Bu kod xatosi emas, deploy konfiguratsiyasi xatosi.
+
+1. Avval qayta urinish tugatilsin (hozir 50 000+ marta restart bo'lgan):
+
+```bash
+sudo systemctl stop deenify.service
+sudo systemctl reset-failed deenify.service
+```
+
+2. Ko'ring nima ishga tushirilmoqda va fayl bor-mi:
+
+```bash
+sudo systemctl cat deenify.service
+ls -la /var/www/deenify/
+ls -la /var/www/deenify/.venv/bin/ | head
+sudo -u deenify /var/www/deenify/.venv/bin/python -V
+```
+
+3. Sabab bo'yicha tuzatish:
+
+| Holat | Tuzatish |
+|-------|---------|
+| `.venv/bin/gunicorn` yo'q | `cd /var/www/deenify && sudo -u deenify python3 -m venv .venv && sudo -u deenify .venv/bin/pip install -r requirements.txt` |
+| venv nomi `venv` (nuqtasiz) | `.env`/unit ichidagi yo'lni `.venv` ga o'zgartiring yoki venv'ni `.venv` ga ko'chiring |
+| fayl bor, lekin `+x` yo'q | `sudo chmod +x /var/www/deenify/.venv/bin/gunicorn` |
+| `venv/Scripts/` (Windows'dan rsync qilingan) | Windows venv'ini serverga yubormang: `rm -rf venv` va `.venv` ni qayta yarating |
+| eski `deenify.service` uniti | `sudo systemctl disable --now deenify.service && sudo systemctl mask deenify.service` va `deenify-web`/`deenify-bot` ni o'rnatish |
+
+4. To'g'ri unitlarni o'rnatish:
+
+```bash
+sudo cp deploy/systemd/deenify-web.service deploy/systemd/deenify-bot.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now deenify-web deenify-bot
+systemctl is-active deenify-web deenify-bot
+```
+
+5. Tezkor tekshiruv (`.env` to'g'ri bo'lishi uchun):
+
+```bash
+cd /var/www/deenify
+sudo -u deenify .venv/bin/python manage.py check
+sudo -u deenify .venv/bin/python manage.py check_click
+sudo -u deenify .venv/bin/python manage.py collectstatic --noinput
+```
+
+> Eslatma: `EnvironmentFile=/var/www/deenify/.env` yo'q bo'lsa xato `226/ENV` bo'ladi —
+> `203/EXEC` esa aynan binary/interpreter muammosi.
+
+### Migratsiya xatosi: `KeyError: ('users', 'atmosorder')`
+
+Sabab: serverda `makemigrations` bilan yaratilgan, lekin **gitga qo'shilmagan** eski
+migration fayli qolib ketgan (masalan `0012_alter_atmosorder_status_and_more.py`).
+Bizning `0012_switch_atmos_orders_to_click.py` modelni `AtmosOrder` → `ClickOrder`
+qilib o'zgartirgani uchun o'sha fayldagi `alter_field` endi mos modelni topa olmaydi.
+
+```bash
+cd /var/www/deenify
+git status --short users/migrations tests/migrations   # begona (??) fayllarni ko'rish
+rm -f users/migrations/0012_alter_atmosorder_status_and_more.py
+sudo -u deenify .venv/bin/python manage.py migrate
+```
+
+> Muhim: `makemigrations` faqat lokal, `git status` toza holatda bajarilishi kerak —
+> generatsiya qilingan fayllar hech qachon serverga yuborilmasin.
 
 ---
 

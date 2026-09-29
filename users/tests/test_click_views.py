@@ -80,7 +80,7 @@ class ClickCheckoutPageTests(TestCase):
         self.assertTemplateUsed(response, "payments/click_checkout.html")
         body = response.content.decode()
         self.assertIn('action="https://my.click.uz/services/pay"', body)
-        self.assertIn('method="post"', body)
+        self.assertIn('method="get"', body)
         self.assertIn(f'value="{SERVICE_ID}"', body)
         self.assertIn(f'value="{MERCHANT_ID}"', body)
         self.assertIn('name="transaction_param"', body)

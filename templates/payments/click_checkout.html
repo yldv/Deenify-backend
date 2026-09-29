@@ -47,7 +47,7 @@
         <div class="row"><span>Buyurtma</span><span>{{ order.merchant_order_id }}</span></div>
       </div>
 
-      <form method="post" action="{{ form_action }}" id="click-form">
+      <form method="get" action="{{ form_action }}" id="click-form">
         {% for name, value in form_fields.items %}
           <input type="hidden" name="{{ name }}" value="{{ value }}">
         {% endfor %}
