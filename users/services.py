@@ -814,12 +814,9 @@ PAYMENT_START_TOKEN_TTL = 3600
 
 
 def _public_api_base_url() -> str:
-    proxy_base = (settings.ATMOS_CHECKOUT_PROXY_BASE or "").strip().rstrip("/")
-    if proxy_base:
-        return proxy_base
-    callback = (settings.ATMOS_CALLBACK_URL or "").strip().rstrip("/")
-    if callback and "/api/" in callback:
-        return callback.split("/api/", 1)[0]
+    public_base = (getattr(settings, "BACKEND_PUBLIC_URL", "") or "").strip().rstrip("/")
+    if public_base:
+        return public_base
     return ""
 
 
@@ -861,15 +858,139 @@ def build_payment_start_url(*, telegram_id: int, plan_id: int) -> str:
             "sig": signature,
         }
     )
-    return f"{base}/api/v1/payments/atmos/start/?{query}"
+    return f"{base}/api/v1/payments/click/start/?{query}"
+
+
+class ClickPaymentService:
+    """Click hosted-payment link and Merchant API callback verification.
+
+    Click amounts are expressed in UZS (not tiyins).  A payment link contains
+    only the order reference; the amount is always revalidated server-side in
+    the callback before a subscription is enabled.
+    """
+
+    def is_configured(self):
+        return bool(
+            settings.CLICK_SERVICE_ID
+            and settings.CLICK_MERCHANT_ID
+            and settings.CLICK_MERCHANT_USER_ID
+            and settings.CLICK_SECRET_KEY
+        )
+
+    def missing_config_fields(self):
+        return [
+            name
+            for name, value in (
+                ("CLICK_SERVICE_ID", settings.CLICK_SERVICE_ID),
+                ("CLICK_MERCHANT_ID", settings.CLICK_MERCHANT_ID),
+                ("CLICK_MERCHANT_USER_ID", settings.CLICK_MERCHANT_USER_ID),
+                ("CLICK_SECRET_KEY", settings.CLICK_SECRET_KEY),
+            )
+            if not value
+        ]
+
+    @staticmethod
+    def amount_string(amount) -> str:
+        return format(Decimal(str(amount)).quantize(Decimal("0.01")), "f")
+
+    def payment_url(self, order):
+        if not self.is_configured():
+            missing = ", ".join(self.missing_config_fields())
+            raise ValueError(f"Click is not configured: {missing}")
+        query = urlencode(
+            {
+                "service_id": settings.CLICK_SERVICE_ID,
+                "merchant_id": settings.CLICK_MERCHANT_ID,
+                "amount": self.amount_string(order.amount),
+                "transaction_param": order.merchant_order_id,
+                "return_url": settings.CLICK_RETURN_URL,
+            }
+        )
+        return f"{settings.CLICK_PAYMENT_URL}?{query}"
+
+    def is_valid_signature(self, payload) -> bool:
+        """Validate Click's documented MD5 callback signature."""
+        try:
+            action = str(payload["action"])
+            parts = [
+                str(payload["click_trans_id"]),
+                str(payload["service_id"]),
+                settings.CLICK_SECRET_KEY,
+                str(payload["merchant_trans_id"]),
+            ]
+            if action == "1":
+                parts.append(str(payload["merchant_prepare_id"]))
+            parts.extend((str(payload["amount"]), action, str(payload["sign_time"])))
+            expected = hashlib.md5("".join(parts).encode("utf-8")).hexdigest()
+            return hmac.compare_digest(expected, str(payload.get("sign_string", "")).lower())
+        except (KeyError, TypeError):
+            return False
+
+
+def create_click_order(*, user, plan):
+    """Create the local order then send the customer to Click's hosted page."""
+    order = AtmosOrder.objects.create(
+        user=user,
+        plan=plan,
+        merchant_order_id=generate_merchant_order_id(user),
+        amount=plan.price,
+        currency=plan.currency,
+        status=AtmosOrder.Status.CREATED,
+    )
+    try:
+        order.payment_url = ClickPaymentService().payment_url(order)
+        order.status = AtmosOrder.Status.PENDING
+    except ValueError as exc:
+        order.response_payload = {"error": str(exc)}
+    order.save(update_fields=("payment_url", "response_payload", "status", "updated_at"))
+    return order
+
+
+def process_click_callback(payload):
+    """Handle both Click Prepare (action=0) and Complete (action=1) calls."""
+    service = ClickPaymentService()
+    base = {
+        "click_trans_id": str(payload.get("click_trans_id", "")),
+        "merchant_trans_id": str(payload.get("merchant_trans_id", "")),
+    }
+    if str(payload.get("service_id", "")) != str(settings.CLICK_SERVICE_ID):
+        return {**base, "error": -8, "error_note": "Error in service_id"}
+    if not service.is_valid_signature(payload):
+        return {**base, "error": -1, "error_note": "SIGN CHECK FAILED!"}
+
+    order = AtmosOrder.objects.select_related("plan").filter(
+        merchant_order_id=base["merchant_trans_id"]
+    ).first()
+    if not order:
+        return {**base, "error": -5, "error_note": "User does not exist"}
+    if service.amount_string(payload.get("amount", "0")) != service.amount_string(order.amount):
+        return {**base, "error": -2, "error_note": "Incorrect parameter amount"}
+
+    action = str(payload.get("action", ""))
+    if action == "0":  # Prepare: reserve the order, do not grant premium yet.
+        if order.status not in (AtmosOrder.Status.CREATED, AtmosOrder.Status.PENDING, AtmosOrder.Status.PAID):
+            return {**base, "error": -9, "error_note": "Transaction cancelled"}
+        return {**base, "merchant_prepare_id": order.pk, "error": 0, "error_note": "Success"}
+    if action == "1":  # Complete: Click has successfully charged the customer.
+        if str(payload.get("merchant_prepare_id", "")) != str(order.pk):
+            return {**base, "error": -6, "error_note": "Transaction does not exist"}
+        if str(payload.get("error", "0")) != "0":
+            order.status = AtmosOrder.Status.FAILED
+            order.response_payload = {"click_callback": dict(payload)}
+            order.save(update_fields=("status", "response_payload", "updated_at"))
+            return {**base, "merchant_confirm_id": order.pk, "error": -9, "error_note": "Transaction cancelled"}
+        order.mark_as_paid(
+            atmos_transaction_id=base["click_trans_id"],
+            payload={"click_callback": dict(payload)},
+        )
+        after_order_paid(order)
+        return {**base, "merchant_confirm_id": order.pk, "error": 0, "error_note": "Success"}
+    return {**base, "error": -3, "error_note": "Action not found"}
 
 
 def build_bot_payment_url(order):
-    """Invoice URL from Atmos API, rewritten to our domain in sandbox (IP proxy)."""
-    payment_url = (order.payment_url or "").strip()
-    if not payment_url:
-        return ""
-    return AtmosPaymentService.client_checkout_url(payment_url)
+    """Click checkout URL already points to Click's public payment page."""
+    return (order.payment_url or "").strip()
 
 
 CARD_SESSION_TOKEN_TTL = 900
@@ -1319,31 +1440,23 @@ def _mark_order_failed(order, payload):
 
 
 def remove_bound_card(user):
-    """Remove the active bound card (Atmos /partner/remove-card) and stop auto-renewal."""
+    """Stop automatic renewal without making any legacy provider request.
+
+    Click hosted checkout does not create reusable card tokens.  Old Atmos card
+    rows may still exist in the database for accounting, but cancelling a
+    current subscription must never contact Atmos.
+    """
     card = (
         BoundCard.objects.filter(user=user, is_active=True)
         .order_by("-created_at")
         .first()
     )
-    error = ""
-    if card:
-        error = _unlink_atmos_card(
-            card_id=card.card_id,
-            card_token=card.card_token,
-            user_label=str(user.telegram_id),
-        )
-    else:
-        logger.info(
-            "Cancel subscription: no active bound card for user=%s (nothing to remove)",
-            user.telegram_id,
-        )
-
     if card:
         card.mark_removed()
     UserPremiumSubscription.objects.filter(user=user, is_active=True, auto_renew=True).update(
         auto_renew=False
     )
-    return {"ok": not error, "removed": bool(card), "error": error}
+    return {"ok": True, "removed": bool(card), "error": ""}
 
 
 # ---------------------------------------------------------------------------

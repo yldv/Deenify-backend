@@ -260,7 +260,6 @@ class BackendApiClient:
     async def create_payment_order(self, *, telegram_id, plan_id):
         return await self._request(
             "POST",
-            "/payments/atmos/orders/",
+            "/payments/click/orders/",
             json={"telegram_id": telegram_id, "plan_id": plan_id},
         )
-

@@ -1,5 +1,4 @@
 import logging
-import os
 from decimal import Decimal, ROUND_HALF_UP
 
 from aiogram import Bot
@@ -17,14 +16,7 @@ PLAN_CALLBACK_PREFIX = "pay_plan:"
 def normalize_payment_url(url: str) -> str:
     if not url:
         return url
-    normalized = str(url).strip()
-    proxy_base = ""
-    backend = os.environ.get("BACKEND_BASE_URL", "").strip().rstrip("/")
-    if backend and "/api/" in backend:
-        proxy_base = backend.split("/api/", 1)[0]
-    for host in ("checkout.atmos.uz", "dev-checkout.atmos.uz", "checkout.pays.uz", "test-checkout.pays.uz"):
-        normalized = normalized.replace(f"http://{host}", f"https://{host}")
-    return normalized
+    return str(url).strip()
 
 
 def format_uzs(amount) -> str:

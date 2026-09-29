@@ -35,6 +35,7 @@ from .services import (
     build_referral_link,
     charge_subscription,
     confirm_card_binding,
+    create_click_order,
     create_atmos_order,
     get_active_plan,
     get_active_premium_subscription,
@@ -42,6 +43,7 @@ from .services import (
     get_referral_stats,
     get_user_statistics,
     process_atmos_callback,
+    process_click_callback,
     parse_atmos_callback_payload,
     remove_bound_card,
     set_telegram_user_bot_active,
@@ -180,8 +182,7 @@ class BotUserReferralView(BotProtectedAPIView):
 
 @extend_schema(tags=["bot-users"], responses={200: OpenApiTypes.OBJECT})
 class BotUserCancelSubscriptionView(BotProtectedAPIView):
-    """Cancel auto-renewal and unlink the card (Atmos remove-card). Premium stays
-    active until the end of the already paid period."""
+    """Cancel any automatic renewal. Premium remains active until expiry."""
 
     def post(self, request, telegram_id):
         user = get_telegram_user(telegram_id)
@@ -258,7 +259,7 @@ class SubscriptionPlanListView(BotProtectedAPIView):
     request=AtmosOrderCreateSerializer,
     responses={201: AtmosOrderCreateResponseSerializer},
 )
-class AtmosOrderCreateView(BotProtectedAPIView):
+class ClickOrderCreateView(BotProtectedAPIView):
     def post(self, request):
         serializer = AtmosOrderCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -273,7 +274,7 @@ class AtmosOrderCreateView(BotProtectedAPIView):
         if not plan:
             return Response({"detail": "Subscription plan not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        order = create_atmos_order(user=user, plan=plan)
+        order = create_click_order(user=user, plan=plan)
         data = AtmosOrderCreateResponseSerializer(order).data
         if not order.payment_url:
             return Response(
@@ -281,6 +282,76 @@ class AtmosOrderCreateView(BotProtectedAPIView):
                 status=status.HTTP_502_BAD_GATEWAY,
             )
         return Response(data, status=status.HTTP_201_CREATED)
+
+
+class ClickPaymentStartView(APIView):
+    """Create one Click order from the bot's signed plan link and show our checkout page."""
+
+    authentication_classes = ()
+    permission_classes = ()
+
+    def get(self, request):
+        try:
+            telegram_id = int(request.GET.get("telegram_id", ""))
+            plan_id = int(request.GET.get("plan_id", ""))
+            exp = int(request.GET.get("exp", ""))
+        except (TypeError, ValueError):
+            return render(
+                request, "payments/click_checkout.html", {"error": "Invalid payment link."}, status=403
+            )
+
+        if not verify_payment_start_signature(
+            telegram_id=telegram_id,
+            plan_id=plan_id,
+            exp=exp,
+            signature=(request.GET.get("sig") or "").strip(),
+        ):
+            return render(
+                request,
+                "payments/click_checkout.html",
+                {"error": "Payment link is invalid or expired."},
+                status=403,
+            )
+
+        user = get_telegram_user(telegram_id)
+        plan = get_active_plan(plan_id)
+        if not user or user.is_blocked or not plan:
+            return render(
+                request,
+                "payments/click_checkout.html",
+                {"error": "Payment link is unavailable."},
+                status=404,
+            )
+
+        order = create_click_order(user=user, plan=plan)
+        if not order.payment_url:
+            return render(
+                request,
+                "payments/click_checkout.html",
+                {"error": (order.response_payload or {}).get("error", "Click payment is unavailable.")},
+                status=503,
+            )
+        return render(
+            request,
+            "payments/click_checkout.html",
+            {
+                "payment_url": order.payment_url,
+                "plan_name": plan.name,
+                "amount": f"{order.amount:,.0f}".replace(",", " "),
+                "currency": order.currency,
+                "bot_url": settings.CLICK_RETURN_URL or "https://t.me/DeenifyUzBot",
+            },
+        )
+
+
+class ClickCallbackView(APIView):
+    """Click Merchant API callback endpoint (register this exact URL in Click)."""
+
+    authentication_classes = ()
+    permission_classes = ()
+
+    def post(self, request):
+        return Response(process_click_callback(request.data), status=status.HTTP_200_OK)
 
 
 @extend_schema(

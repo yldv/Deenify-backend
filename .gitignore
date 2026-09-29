@@ -21,6 +21,7 @@ staticfiles/
 # Env
 .env
 .env.*
+!.env.example
 
 # Mac
 .DS_Store

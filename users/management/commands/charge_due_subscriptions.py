@@ -42,6 +42,13 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        if not getattr(settings, "CLICK_RECURRING_ENABLED", False):
+            self.stdout.write(
+                self.style.WARNING(
+                    "Automatic renewals are disabled: Click hosted payments do not use Atmos card tokens."
+                )
+            )
+            return
         dry_run = options["dry_run"]
         now = timezone.now()
         test_minutes = getattr(settings, "DEENIFY_TEST_MONTHLY_RENEWAL_MINUTES", 0)

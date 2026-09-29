@@ -208,7 +208,7 @@ SPECTACULAR_SETTINGS = {
         {'name': 'bot-users', 'description': 'Telegram foydalanuvchilar'},
         {'name': 'quiz', 'description': 'Test savollari'},
         {'name': 'subscriptions', 'description': 'Obuna rejalari'},
-        {'name': 'payments', 'description': 'Atmos to\'lovlar'},
+        {'name': 'payments', 'description': 'Click to\'lovlar'},
         {'name': 'admin', 'description': 'Admin statistika'},
     ],
 }
@@ -220,6 +220,7 @@ from config.jazzmin_settings import JAZZMIN_SETTINGS, JAZZMIN_UI_TWEAKS  # noqa:
 BOT_TOKEN = os.environ.get('BOT_TOKEN', '').strip()
 # Bot username (without @) used to build referral deep links: t.me/<BOT_USERNAME>?start=ref_<id>
 BOT_USERNAME = os.environ.get('BOT_USERNAME', 'DeenifyUzBot').strip().lstrip('@')
+BACKEND_PUBLIC_URL = os.environ.get('BACKEND_PUBLIC_URL', '').strip().rstrip('/')
 
 ATMOS_STORE_ID = os.environ.get('ATMOS_STORE_ID', '').strip()
 ATMOS_TERMINAL_ID = os.environ.get('ATMOS_TERMINAL_ID', '').strip()
@@ -304,6 +305,23 @@ ATMOS_RENEW_FAIL_GRACE_MINUTES = int(
 ATMOS_STALE_ORDER_RETENTION_DAYS = int(
     os.environ.get('ATMOS_STALE_ORDER_RETENTION_DAYS', '1')
 )
+
+# Click.  Values are issued in the Click merchant cabinet.  The callback URL
+# must be publicly reachable and registered there:
+# https://<your-domain>/api/v1/payments/click/callback/
+CLICK_SERVICE_ID = os.environ.get('CLICK_SERVICE_ID', '').strip()
+CLICK_MERCHANT_ID = os.environ.get('CLICK_MERCHANT_ID', '').strip()
+CLICK_MERCHANT_USER_ID = os.environ.get('CLICK_MERCHANT_USER_ID', '').strip()
+CLICK_SECRET_KEY = os.environ.get('CLICK_SECRET_KEY', '').strip()
+CLICK_PAYMENT_URL = os.environ.get(
+    'CLICK_PAYMENT_URL', 'https://my.click.uz/services/pay'
+).strip().rstrip('/')
+CLICK_RETURN_URL = os.environ.get(
+    'CLICK_RETURN_URL', 'https://t.me/DeenifyUzBot'
+).strip()
+# Click hosted links do not create reusable card tokens. Keep false unless a
+# separate Click recurring agreement flow is implemented.
+CLICK_RECURRING_ENABLED = os.environ.get('CLICK_RECURRING_ENABLED', 'False') == 'True'
 # Delete unpaid subscription catalog messages after this many seconds (matches payment link TTL).
 OFFER_MESSAGE_TTL_SECONDS = int(os.environ.get('OFFER_MESSAGE_TTL_SECONDS', '3600'))
 
