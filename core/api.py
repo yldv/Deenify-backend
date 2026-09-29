@@ -15,7 +15,7 @@ def get_requested_language(request, user=None):
 def get_telegram_user(telegram_id):
     return (
         TelegramUser.objects.filter(telegram_id=telegram_id)
-        .prefetch_related("premium_subscriptions__plan", "atmos_orders__plan")
+        .prefetch_related("premium_subscriptions__plan", "click_orders__plan")
         .first()
     )
 

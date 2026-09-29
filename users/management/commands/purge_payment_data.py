@@ -9,9 +9,8 @@ from django.db import transaction
 
 from tests.models import Answer, Test, UserAnsweredTest
 from users.models import (
-    AtmosOrder,
-    AtmosTransaction,
-    BoundCard,
+    ClickOrder,
+    ClickTransaction,
     Feedback,
     TelegramUser,
     UserPremiumSubscription,
@@ -21,7 +20,7 @@ from users.models import (
 class Command(BaseCommand):
     help = (
         "Delete payment + quiz sandbox data "
-        "(orders, subscriptions, cards, feedback, questions, answers, user progress)."
+        "(orders, transactions, subscriptions, feedback, questions, answers, user progress)."
     )
 
     def add_arguments(self, parser):
@@ -39,9 +38,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         counts = {
             "premium_subscriptions": UserPremiumSubscription.objects.count(),
-            "atmos_orders": AtmosOrder.objects.count(),
-            "atmos_transactions": AtmosTransaction.objects.count(),
-            "bound_cards": BoundCard.objects.count(),
+            "click_orders": ClickOrder.objects.count(),
+            "click_transactions": ClickTransaction.objects.count(),
             "feedback": Feedback.objects.count(),
             "user_answered_tests": UserAnsweredTest.objects.count(),
             "answers": Answer.objects.count(),
@@ -62,9 +60,8 @@ class Command(BaseCommand):
 
         with transaction.atomic():
             deleted_subs, _ = UserPremiumSubscription.objects.all().delete()
-            deleted_tx, _ = AtmosTransaction.objects.all().delete()
-            deleted_orders, _ = AtmosOrder.objects.all().delete()
-            deleted_cards, _ = BoundCard.objects.all().delete()
+            deleted_tx, _ = ClickTransaction.objects.all().delete()
+            deleted_orders, _ = ClickOrder.objects.all().delete()
             deleted_feedback, _ = Feedback.objects.all().delete()
 
             deleted_progress, _ = UserAnsweredTest.objects.all().delete()
@@ -79,7 +76,6 @@ class Command(BaseCommand):
                 f"{deleted_subs} subscription(s), "
                 f"{deleted_orders} order(s), "
                 f"{deleted_tx} transaction(s), "
-                f"{deleted_cards} card(s), "
                 f"{deleted_feedback} feedback(s), "
                 f"{deleted_progress} user answer(s), "
                 f"{deleted_tests} question(s), "

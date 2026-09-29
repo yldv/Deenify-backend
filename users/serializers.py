@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import AtmosOrder, Feedback, SubscriptionPlan, TelegramUser
+from .models import ClickOrder, Feedback, SubscriptionPlan, TelegramUser
 from .services import (
     get_active_premium_subscription,
     get_user_premium_until,
@@ -127,17 +127,17 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
         return build_payment_start_url(telegram_id=int(telegram_id), plan_id=obj.id)
 
 
-class AtmosOrderCreateSerializer(serializers.Serializer):
+class ClickOrderCreateSerializer(serializers.Serializer):
     telegram_id = serializers.IntegerField()
     plan_id = serializers.IntegerField()
 
 
-class AtmosOrderSerializer(serializers.ModelSerializer):
+class ClickOrderSerializer(serializers.ModelSerializer):
     merchant_order_id = serializers.CharField()
     plan = SubscriptionPlanSerializer(read_only=True)
 
     class Meta:
-        model = AtmosOrder
+        model = ClickOrder
         fields = (
             "id",
             "order_id",
@@ -145,48 +145,34 @@ class AtmosOrderSerializer(serializers.ModelSerializer):
             "plan",
             "amount",
             "status",
-            "payment_url",
+            "checkout_url",
             "paid_at",
             "created_at",
         )
 
 
-class AtmosOrderCreateResponseSerializer(serializers.ModelSerializer):
+class ClickOrderCreateResponseSerializer(serializers.ModelSerializer):
     payment_error = serializers.SerializerMethodField()
-    payment_url = serializers.SerializerMethodField()
+    checkout_url = serializers.SerializerMethodField()
 
     class Meta:
-        model = AtmosOrder
+        model = ClickOrder
         fields = (
             "order_id",
             "merchant_order_id",
             "amount",
             "status",
-            "payment_url",
+            "checkout_url",
             "payment_error",
         )
 
-    def get_payment_url(self, obj):
+    def get_checkout_url(self, obj):
         from .services import build_bot_payment_url
 
         return build_bot_payment_url(obj)
 
     def get_payment_error(self, obj):
-        if obj.payment_url:
+        if obj.checkout_url:
             return ""
         payload = obj.response_payload or {}
-        return (
-            payload.get("error")
-            or payload.get("detail")
-            or self._extract_result_error(payload.get("last_error_response") or {})
-            or self._extract_result_error(payload)
-            or "Payment URL was not created."
-        )
-
-    @staticmethod
-    def _extract_result_error(payload):
-        result = payload.get("result") or {}
-        code = result.get("code")
-        if code and str(code).upper() != "OK":
-            return result.get("description") or result.get("message") or str(code)
-        return ""
+        return payload.get("error") or "Click checkout page was not created."

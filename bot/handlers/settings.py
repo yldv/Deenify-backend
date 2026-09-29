@@ -152,25 +152,17 @@ async def settings_cancel_subscription(message: Message, state: FSMContext, api_
         await message.answer(get_text(language, "error"), reply_markup=settings_keyboard(language))
         return
 
-    if not result.get("had_premium") and not result.get("removed"):
+    if not result.get("had_premium"):
         await message.answer(
             get_text(language, "cancel_no_subscription"),
             reply_markup=settings_keyboard(language),
         )
         return
 
-    until = result.get("expires_at") or ""
-    if until:
-        await message.answer(
-            get_text(language, "cancel_done", until=until),
-            reply_markup=settings_keyboard(language),
-            parse_mode="HTML",
-        )
-    else:
-        await message.answer(
-            get_text(language, "cancel_done_no_premium"),
-            reply_markup=settings_keyboard(language),
-        )
+    await message.answer(
+        get_text(language, "cancel_done"),
+        reply_markup=settings_keyboard(language),
+    )
     await start_feedback_survey(
         message=message, state=state, language=language, context="canceled"
     )

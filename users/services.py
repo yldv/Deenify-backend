@@ -1,15 +1,10 @@
-import base64
 import hashlib
 import hmac
-import json
 import logging
 import time
 from decimal import Decimal
 from secrets import randbelow
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
-from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +18,8 @@ from tests.models import UserAnsweredTest
 from tests.quiz_services import get_quiz_progress
 
 from .models import (
-    AtmosOrder,
-    AtmosTransaction,
-    BoundCard,
+    ClickOrder,
+    ClickTransaction,
     SubscriptionPlan,
     TelegramUser,
     UserPremiumSubscription,
@@ -103,7 +97,7 @@ def _attach_referrer(user, referrer_telegram_id):
     # Already-converted users can't be (re)attributed to a new inviter.
     if user.referral_rewarded:
         return
-    if user.atmos_orders.filter(status=AtmosOrder.Status.PAID).exists():
+    if user.click_orders.filter(status=ClickOrder.Status.PAID).exists():
         return
     referrer = TelegramUser.objects.filter(telegram_id=referrer_telegram_id).first()
     if not referrer:
@@ -175,8 +169,8 @@ def get_user_subscription_snapshot(user):
         }
 
     pending_order = (
-        user.atmos_orders.filter(
-            status__in=(AtmosOrder.Status.CREATED, AtmosOrder.Status.PENDING),
+        user.click_orders.filter(
+            status__in=(ClickOrder.Status.CREATED, ClickOrder.Status.PENDING),
         )
         .select_related("plan")
         .order_by("-created_at")
@@ -219,553 +213,9 @@ def get_user_statistics(user):
     }
 
 
-class AtmosPaymentService:
-    def __init__(self):
-        self.base_url = settings.ATMOS_BASE_URL.rstrip("/")
-        self.store_id = settings.ATMOS_STORE_ID
-        self.terminal_id = settings.ATMOS_TERMINAL_ID
-        self.consumer_key = settings.ATMOS_CONSUMER_KEY
-        self.consumer_secret = settings.ATMOS_CONSUMER_SECRET
-        self.callback_url = settings.ATMOS_CALLBACK_URL
-        self.return_url = settings.ATMOS_RETURN_URL
-
-    def is_configured(self):
-        return bool(
-            self.base_url
-            and self.store_id
-            and self.consumer_key
-            and self.consumer_secret
-        )
-
-    def missing_config_fields(self):
-        missing = []
-        if not self.store_id:
-            missing.append("ATMOS_STORE_ID")
-        if not self.consumer_key:
-            missing.append("ATMOS_CONSUMER_KEY")
-        if not self.consumer_secret:
-            missing.append("ATMOS_CONSUMER_SECRET")
-        return missing
-
-    @staticmethod
-    def _read_http_body(exc: HTTPError) -> dict:
-        try:
-            body = exc.read().decode("utf-8")
-            return json.loads(body) if body else {"error": str(exc)}
-        except Exception:
-            return {"error": str(exc), "status": exc.code}
-
-    def _request_json(self, path, *, payload=None, headers=None, method="POST", timeout=None):
-        if timeout is None:
-            timeout = settings.ATMOS_REQUEST_TIMEOUT
-        data = None
-        request_headers = headers or {}
-        if payload is not None:
-            data = json.dumps(payload).encode("utf-8")
-            request_headers = {"Content-Type": "application/json", **request_headers}
-
-        request = Request(
-            f"{self.base_url}{path}",
-            data=data,
-            headers=request_headers,
-            method=method,
-        )
-        try:
-            with urlopen(request, timeout=timeout) as response:
-                body = response.read().decode("utf-8")
-                return json.loads(body) if body else {}
-        except HTTPError as exc:
-            error_payload = self._read_http_body(exc)
-            error_payload["http_status"] = exc.code
-            raise ValueError(error_payload) from exc
-
-    def get_access_token(self):
-        credentials = f"{self.consumer_key}:{self.consumer_secret}".encode("utf-8")
-        encoded_credentials = base64.b64encode(credentials).decode("ascii")
-        request = Request(
-            f"{self.base_url}/token?grant_type=client_credentials",
-            data=b"grant_type=client_credentials",
-            headers={
-                "Authorization": f"Basic {encoded_credentials}",
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-            method="POST",
-        )
-        try:
-            with urlopen(request, timeout=settings.ATMOS_REQUEST_TIMEOUT) as response:
-                raw = json.loads(response.read().decode("utf-8"))
-        except HTTPError as exc:
-            error_payload = self._read_http_body(exc)
-            raise ValueError(error_payload) from exc
-        access_token = raw.get("access_token")
-        if not access_token:
-            raise ValueError(raw)
-        return access_token, raw
-
-    @staticmethod
-    def _normalize_checkout_url(url: str) -> str:
-        if not url:
-            return url
-        normalized = str(url).strip()
-        for host in (
-            "checkout.atmos.uz",
-            "dev-checkout.atmos.uz",
-            "checkout.pays.uz",
-        ):
-            normalized = normalized.replace(f"http://{host}", f"https://{host}")
-        return normalized
-
-    @staticmethod
-    def client_checkout_url(url: str) -> str:
-        """Normalize checkout URL (Atmos: test-checkout.pays.uz, no dev-checkout proxy)."""
-        return AtmosPaymentService._normalize_checkout_url(url)
-
-    def _payment_flow(self) -> str:
-        flow = (settings.ATMOS_PAYMENT_FLOW or "").strip().lower()
-        if flow in {"merchant", "invoice"}:
-            return flow
-        return "merchant"
-
-    def _public_checkout_base(self) -> str:
-        if settings.ATMOS_TEST_MODE:
-            return "https://test-checkout.pays.uz"
-        return "https://checkout.pays.uz"
-
-    def _merchant_headers(self, access_token: str) -> dict:
-        # Outbound merchant/partner API: Bearer token only (docs.atmos.uz).
-        # ATMOS_API_KEY is for validating incoming callbacks, not outbound requests.
-        return {
-            "Authorization": f"Bearer {access_token}",
-            "Accept": "application/json",
-        }
-
-    @staticmethod
-    def _is_success_code(code) -> bool:
-        if code in (None, ""):
-            return True
-        normalized = str(code).strip().upper()
-        return normalized in {"OK", "0", "SUCCESS"}
-
-    @staticmethod
-    def _extract_payment_transaction_id(raw: dict) -> str:
-        for key in ("payment_id", "transaction_id", "trans_id", "transactionId"):
-            value = raw.get(key)
-            if value not in (None, ""):
-                return str(value)
-        store_transaction = raw.get("store_transaction") or {}
-        for key in ("trans_id", "success_trans_id"):
-            value = store_transaction.get(key)
-            if value not in (None, ""):
-                return str(value)
-        return ""
-
-    @staticmethod
-    def _extract_payment_url(raw: dict) -> str:
-        for key in ("url", "paymentUrl", "payment_url", "pay_url"):
-            value = raw.get(key)
-            if value:
-                return str(value)
-        return ""
-
-    @staticmethod
-    def _extract_api_error(raw: dict) -> str:
-        status = raw.get("status") or {}
-        code = status.get("code")
-        if code is not None and not AtmosPaymentService._is_success_code(code):
-            description = str(status.get("description") or status.get("message") or code)
-            locale = status.get("locale") or {}
-            if not description and locale:
-                description = str(locale.get("ru") or locale.get("uz") or locale.get("en") or code)
-            return f"{description} (code: {code})"
-        result = raw.get("result") or {}
-        code = result.get("code")
-        if code and not AtmosPaymentService._is_success_code(code):
-            description = str(result.get("description") or result.get("message") or code)
-            return f"{description} (code: {code})"
-        if raw.get("error"):
-            return str(raw["error"])
-        if raw.get("detail"):
-            return str(raw["detail"])
-        if raw.get("http_status"):
-            code = raw["http_status"]
-            if code == 403:
-                return (
-                    "Atmos denied access (HTTP 403). "
-                    "Ask Atmos to whitelist your server IP and enable Merchant API "
-                    "for this Store/Terminal."
-                )
-            return f"Atmos HTTP {code}"
-        return ""
-
-    @staticmethod
-    def _extract_checkout_transaction_id(raw: dict) -> str:
-        store_transaction = raw.get("store_transaction") or {}
-        for key in ("trans_id", "success_trans_id"):
-            value = store_transaction.get(key)
-            if value not in (None, ""):
-                return str(value)
-        return AtmosPaymentService._extract_payment_transaction_id(raw)
-
-    def build_checkout_page_url(self, *, transaction_id: str, redirect_link: str = "") -> str:
-        base = self._public_checkout_base()
-        params = {
-            "storeId": self._normalize_store_id(self.store_id),
-            "transactionId": str(transaction_id),
-        }
-        redirect = (redirect_link or self.return_url or "").strip()
-        if redirect:
-            params["redirectLink"] = redirect
-        return self.client_checkout_url(f"{base}/invoice/get?{urlencode(params)}")
-
-    def _build_merchant_pay_payload(self, order) -> dict:
-        """Body for POST /merchant/pay/create (docs.atmos.uz)."""
-        amount_tiyin = amount_to_tiyin(order.amount)
-        payload = {
-            "amount": amount_tiyin,
-            "account": order.merchant_order_id,
-            "store_id": self._normalize_store_id(self.store_id),
-            "lang": "uz",
-        }
-        if self.terminal_id:
-            payload["terminal_id"] = str(self.terminal_id).strip()
-        redirect = (self.return_url or "").strip()
-        if redirect:
-            payload["redirect_link"] = redirect
-        return payload
-
-    def _create_merchant_transaction(self, order, access_token):
-        payload = self._build_merchant_pay_payload(order)
-        raw = self._request_json(
-            "/merchant/pay/create",
-            payload=payload,
-            headers=self._merchant_headers(access_token),
-        )
-        return raw, payload
-
-    @staticmethod
-    def _ofd_item_details():
-        return [
-            {"name": "package_code", "values": "1"},
-            {"name": "mark_code", "values": "0"},
-            {"name": "tin", "values": "0"},
-            {"name": "discount", "values": "0"},
-            {"name": "quantity", "values": "1"},
-        ]
-
-    def _build_invoice_item(self, *, plan_name: str, amount_tiyin: int) -> dict:
-        return {
-            "items_id": "1",
-            "code": "premium",
-            "name": str(plan_name)[:255],
-            "amount": amount_tiyin,
-            "quantity": 1,
-            "details": self._ofd_item_details(),
-        }
-
-    def _build_invoice_payload(self, order, *, use_doc_items_field: bool = False):
-        amount_tiyin = amount_to_tiyin(order.amount)
-        plan_name = "Deenify Premium"
-        if getattr(order, "plan", None):
-            plan_name = order.plan.name or plan_name
-        request_id = (order.merchant_order_id or order.order_id or uuid4().hex)[:64]
-        item = self._build_invoice_item(plan_name=plan_name, amount_tiyin=amount_tiyin)
-        payload = {
-            "request_id": request_id,
-            "store_id": int(self._normalize_store_id(self.store_id)),
-            "account": order.merchant_order_id,
-            "amount": amount_tiyin,
-            "success_url": self.return_url or settings.ATMOS_SUCCESS_REDIRECT_URL,
-            "expiration_time": settings.ATMOS_INVOICE_EXPIRATION_SECONDS,
-        }
-        if use_doc_items_field:
-            payload["items"] = [item]
-        else:
-            payload["payment_items"] = [item]
-        return payload
-
-    def _create_invoice(self, order, access_token):
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Accept": "application/json",
-        }
-        raw = {}
-        payload = self._build_invoice_payload(order)
-        for use_doc_items in (False, True):
-            payload = self._build_invoice_payload(order, use_doc_items_field=use_doc_items)
-            raw = self._request_json(
-                "/checkout/invoice/create",
-                payload=payload,
-                headers=headers,
-            )
-            api_error = self._extract_api_error(raw)
-            payment_url = self._extract_payment_url(raw)
-            if payment_url or not api_error:
-                return raw, payload
-            if str(api_error).find("-999998") == -1:
-                return raw, payload
-        return raw, payload
-
-    def get_merchant_transaction(self, transaction_id: str) -> dict:
-        access_token, _ = self.get_access_token()
-        payload = {
-            "store_id": int(self._normalize_store_id(self.store_id)),
-            "transaction_id": int(transaction_id),
-        }
-        return self._request_json(
-            "/merchant/pay/get",
-            payload=payload,
-            headers=self._merchant_headers(access_token),
-        )
-
-    def pre_apply(self, *, transaction_id, card_number=None, expiry=None, card_token=None) -> dict:
-        """POST /merchant/pay/pre-apply.
-
-        With card_number+expiry: Atmos sends an OTP via SMS (one-time payment).
-        With card_token (bound card): no SMS is sent (recurring/auto payment).
-        """
-        access_token, _ = self.get_access_token()
-        payload = {
-            "store_id": int(self._normalize_store_id(self.store_id)),
-            "transaction_id": int(transaction_id),
-        }
-        if card_token:
-            payload["card_token"] = str(card_token).strip()
-        else:
-            payload["card_number"] = str(card_number).replace(" ", "").strip()
-            payload["expiry"] = str(expiry).strip()
-        return self._request_json(
-            "/merchant/pay/pre-apply",
-            payload=payload,
-            headers=self._merchant_headers(access_token),
-        )
-
-    def bind_card_init(self, *, card_number, expiry) -> dict:
-        """POST /partner/bind-card/init: start linking a card; Atmos sends an SMS code."""
-        access_token, _ = self.get_access_token()
-        payload = {
-            "card_number": str(card_number).replace(" ", "").strip(),
-            "expiry": str(expiry).strip(),
-        }
-        return self._request_json(
-            "/partner/bind-card/init",
-            payload=payload,
-            headers=self._merchant_headers(access_token),
-        )
-
-    def bind_card_confirm(self, *, transaction_id, otp) -> dict:
-        """POST /partner/bind-card/confirm: confirm with SMS code, returns card_token."""
-        access_token, _ = self.get_access_token()
-        otp_value = str(otp).strip()
-        payload = {
-            "transaction_id": int(transaction_id),
-            "otp": otp_value,
-        }
-        return self._request_json(
-            "/partner/bind-card/confirm",
-            payload=payload,
-            headers=self._merchant_headers(access_token),
-        )
-
-    def remove_card(self, *, card_id, card_token) -> dict:
-        """POST /partner/remove-card: cancel a previously linked card token."""
-        access_token, _ = self.get_access_token()
-        payload = {
-            "id": int(card_id) if str(card_id).isdigit() else card_id,
-            "token": str(card_token).strip(),
-        }
-        return self._request_json(
-            "/partner/remove-card",
-            payload=payload,
-            headers=self._merchant_headers(access_token),
-        )
-
-    def apply(self, *, transaction_id, otp) -> dict:
-        """POST /merchant/pay/apply: confirm with OTP and charge the card."""
-        access_token, _ = self.get_access_token()
-        otp_value = str(otp).strip()
-        payload = {
-            "otp": int(otp_value) if otp_value.isdigit() else otp_value,
-            "store_id": int(self._normalize_store_id(self.store_id)),
-            "transaction_id": int(transaction_id),
-        }
-        return self._request_json(
-            "/merchant/pay/apply",
-            payload=payload,
-            headers=self._merchant_headers(access_token),
-            timeout=settings.ATMOS_APPLY_TIMEOUT,
-        )
-
-    @staticmethod
-    def _normalize_store_id(store_id):
-        # Atmos API examples use store_id as string (e.g. "10902").
-        return str(store_id).strip()
-
-    @staticmethod
-    def _format_request_error(exc: Exception) -> str:
-        if isinstance(exc, ValueError) and exc.args and isinstance(exc.args[0], dict):
-            return AtmosPaymentService._extract_api_error(exc.args[0]) or str(exc)
-        message = str(exc).lower()
-        if "timed out" in message or "timeout" in message:
-            return (
-                "Atmos API did not respond in time. "
-                "If this happens on apply, increase ATMOS_APPLY_TIMEOUT in .env."
-            )
-        if "nodename nor servname" in message or "name or service not known" in message:
-            return "Cannot resolve Atmos API host. Check ATMOS_BASE_URL."
-        return str(exc)
-
-    def create_payment(self, order):
-        if not self.is_configured():
-            missing = ", ".join(self.missing_config_fields())
-            detail = (
-                f"Atmos is not configured. Set in .env: {missing}. "
-                + (
-                    "Get prod keys at https://partner.atmos.uz"
-                    if not settings.ATMOS_TEST_MODE
-                    else "Get test keys at https://partner-test.atmos.uz"
-                )
-            )
-            logger.warning("Atmos payment skipped: %s", detail)
-            return {
-                "payment_url": "",
-                "transaction_id": "",
-                "error": detail,
-                "raw": {"detail": detail},
-                "request": {},
-            }
-        if self._payment_flow() == "invoice":
-            return self._create_payment_invoice(order)
-        return self._create_payment_merchant(order)
-
-    def _create_payment_merchant(self, order):
-        payload = self._build_merchant_pay_payload(order)
-        try:
-            access_token, token_response = self.get_access_token()
-            raw, payload = self._create_merchant_transaction(order, access_token)
-        except (OSError, URLError, KeyError, ValueError) as exc:
-            error_detail = self._format_request_error(exc)
-            logger.exception(
-                "Atmos merchant/pay/create failed for order=%s: %s",
-                order.merchant_order_id,
-                error_detail,
-            )
-            return {
-                "payment_url": "",
-                "transaction_id": "",
-                "error": error_detail,
-                "raw": {"error": error_detail},
-                "request": payload,
-            }
-
-        api_error = self._extract_api_error(raw)
-        checkout_transaction_id = self._extract_checkout_transaction_id(raw)
-        redirect_link = (self.return_url or "").strip()
-        payment_url = ""
-        if checkout_transaction_id:
-            payment_url = self.build_checkout_page_url(
-                transaction_id=checkout_transaction_id,
-                redirect_link=redirect_link,
-            )
-
-        if api_error and not checkout_transaction_id:
-            logger.error(
-                "Atmos merchant/pay/create rejected order=%s error=%s raw=%s",
-                order.merchant_order_id,
-                api_error,
-                raw,
-            )
-            return {
-                "payment_url": "",
-                "transaction_id": checkout_transaction_id,
-                "error": api_error,
-                "raw": {**raw, "token_response": token_response},
-                "request": payload,
-            }
-
-        if not payment_url:
-            error = api_error or "Atmos did not return transaction id for checkout."
-            logger.error(
-                "Atmos merchant/pay/create without checkout URL order=%s error=%s raw=%s",
-                order.merchant_order_id,
-                error,
-                raw,
-            )
-            return {
-                "payment_url": "",
-                "transaction_id": checkout_transaction_id,
-                "error": error,
-                "raw": {**raw, "token_response": token_response},
-                "request": payload,
-            }
-
-        return {
-            "payment_url": payment_url,
-            "transaction_id": checkout_transaction_id,
-            "error": "",
-            "raw": {**raw, "token_response": token_response},
-            "request": payload,
-        }
-
-    def _create_payment_invoice(self, order):
-        payload = self._build_invoice_payload(order)
-        try:
-            access_token, token_response = self.get_access_token()
-            raw, payload = self._create_invoice(order, access_token)
-        except (OSError, URLError, KeyError, ValueError) as exc:
-            error_detail = self._format_request_error(exc)
-            logger.exception(
-                "Atmos checkout/invoice/create failed for order=%s: %s",
-                order.merchant_order_id,
-                error_detail,
-            )
-            return {
-                "payment_url": "",
-                "transaction_id": "",
-                "error": error_detail,
-                "raw": {"error": error_detail},
-                "request": payload,
-            }
-
-        api_error = self._extract_api_error(raw)
-        transaction_id = self._extract_payment_transaction_id(raw)
-        payment_url = self.client_checkout_url(self._extract_payment_url(raw))
-
-        if api_error and not payment_url:
-            logger.error(
-                "Atmos invoice create rejected order=%s error=%s raw=%s",
-                order.merchant_order_id,
-                api_error,
-                raw,
-            )
-            return {
-                "payment_url": "",
-                "transaction_id": transaction_id,
-                "error": api_error,
-                "raw": {**raw, "token_response": token_response},
-                "request": payload,
-            }
-
-        if not payment_url:
-            error = api_error or "Atmos did not return payment url."
-            return {
-                "payment_url": "",
-                "transaction_id": transaction_id,
-                "error": error,
-                "raw": {**raw, "token_response": token_response},
-                "request": payload,
-            }
-
-        return {
-            "payment_url": payment_url,
-            "transaction_id": transaction_id,
-            "error": "",
-            "raw": {**raw, "token_response": token_response},
-            "request": payload,
-        }
-
-
-def amount_to_tiyin(amount):
-    return int((Decimal(str(amount)) * Decimal("100")).quantize(Decimal("1")))
+# ---------------------------------------------------------------------------
+# Click: payment form + Merchant API callback
+# ---------------------------------------------------------------------------
 
 
 def generate_merchant_order_id(user):
@@ -774,33 +224,116 @@ def generate_merchant_order_id(user):
     return f"{timestamp}{user.telegram_id}{suffix}"[:64]
 
 
-@transaction.atomic
-def create_atmos_order(*, user, plan):
-    order = AtmosOrder.objects.create(
+class ClickPaymentService:
+    """Click custom HTML-form integration.
+
+    The customer stays on our own checkout page: we render a small HTML form
+    that POSTs to Click's payment page (``CLICK_PAYMENT_URL``).  Click then
+    calls our Merchant API callback twice (Prepare ``action=0`` and Complete
+    ``action=1``) and redirects the browser to ``CLICK_RETURN_URL``.
+
+    Click amounts are in UZS (not tiyins).  The form only carries the order
+    reference — the amount is always re-validated server-side in the callback
+    before a subscription is enabled.
+    """
+
+    def is_configured(self):
+        return not self.missing_config_fields()
+
+    def missing_config_fields(self):
+        return [
+            name
+            for name, value in (
+                ("CLICK_SERVICE_ID", settings.CLICK_SERVICE_ID),
+                ("CLICK_MERCHANT_ID", settings.CLICK_MERCHANT_ID),
+                ("CLICK_SECRET_KEY", settings.CLICK_SECRET_KEY),
+                ("CLICK_RETURN_URL", settings.CLICK_RETURN_URL),
+            )
+            if not value
+        ]
+
+    @staticmethod
+    def amount_string(amount) -> str:
+        return format(Decimal(str(amount)).quantize(Decimal("0.01")), "f")
+
+    def checkout_form_fields(self, order) -> dict:
+        """Hidden inputs of the HTML form that opens Click's payment page."""
+        self._require_config()
+        plan_name = (order.plan.name if order.plan else "Deenify Premium")[:200]
+        fields = {
+            "service_id": settings.CLICK_SERVICE_ID,
+            "merchant_id": settings.CLICK_MERCHANT_ID,
+            "order_id": order.merchant_order_id,
+            "transaction_param": order.merchant_order_id,
+            "amount": self.amount_string(order.amount),
+            "currency": (order.currency or "UZS").upper(),
+            "description": f"Deenify: {plan_name}",
+            "lang": settings.CLICK_LANG,
+            "return_url": settings.CLICK_RETURN_URL,
+        }
+        if settings.CLICK_MERCHANT_USER_ID:
+            fields["merchant_user_id"] = settings.CLICK_MERCHANT_USER_ID
+        return fields
+
+    def _require_config(self):
+        missing = self.missing_config_fields()
+        if missing:
+            raise ValueError(f"Click is not configured: {', '.join(missing)}")
+
+    @staticmethod
+    def build_sign_string(payload, secret_key: str) -> str:
+        """Click's documented MD5 signature source string.
+
+        Prepare:  click_trans_id + service_id + secret + merchant_trans_id
+                  + amount + action + sign_time
+        Complete: ... + merchant_prepare_id before amount.
+        """
+        action = str(payload["action"])
+        parts = [
+            str(payload["click_trans_id"]),
+            str(payload["service_id"]),
+            secret_key,
+            str(payload["merchant_trans_id"]),
+        ]
+        if action == "1":
+            parts.append(str(payload["merchant_prepare_id"]))
+        parts.extend((str(payload["amount"]), action, str(payload["sign_time"])))
+        return "".join(parts)
+
+    def is_valid_signature(self, payload) -> bool:
+        try:
+            expected = hashlib.md5(
+                self.build_sign_string(payload, settings.CLICK_SECRET_KEY).encode("utf-8")
+            ).hexdigest()
+        except (KeyError, TypeError):
+            return False
+        received = payload.get("sign_string") or payload.get("sign") or ""
+        return hmac.compare_digest(expected, str(received).strip().lower())
+
+
+def create_click_order(*, user, plan) -> ClickOrder:
+    """Create the local order and prepare the data for our checkout page."""
+    order = ClickOrder.objects.create(
         user=user,
         plan=plan,
         merchant_order_id=generate_merchant_order_id(user),
         amount=plan.price,
         currency=plan.currency,
-        status=AtmosOrder.Status.CREATED,
+        status=ClickOrder.Status.CREATED,
     )
-    payment = AtmosPaymentService().create_payment(order)
-    order.payment_url = payment["payment_url"]
-    order.atmos_transaction_id = payment["transaction_id"]
-    order.request_payload = payment.get("request", {})
-    _init_atmos_trace(
-        order,
-        step="merchant/pay/create",
-        request=payment.get("request", {}),
-        response=payment.get("raw", {}),
-        error=payment.get("error") or "",
-    )
-    if order.payment_url:
-        order.status = AtmosOrder.Status.PENDING
+    try:
+        service = ClickPaymentService()
+        fields = service.checkout_form_fields(order)
+    except ValueError as exc:
+        order.response_payload = {"error": str(exc)}
+    else:
+        order.checkout_url = build_order_checkout_url(order)
+        order.request_payload = {"form": fields}
+        order.response_payload = {"form_target": settings.CLICK_PAYMENT_URL}
+        order.status = ClickOrder.Status.PENDING
     order.save(
         update_fields=(
-            "payment_url",
-            "atmos_transaction_id",
+            "checkout_url",
             "request_payload",
             "response_payload",
             "status",
@@ -810,14 +343,14 @@ def create_atmos_order(*, user, plan):
     return order
 
 
-PAYMENT_START_TOKEN_TTL = 3600
-
-
 def _public_api_base_url() -> str:
     public_base = (getattr(settings, "BACKEND_PUBLIC_URL", "") or "").strip().rstrip("/")
     if public_base:
         return public_base
     return ""
+
+
+PAYMENT_START_TOKEN_TTL = 3600
 
 
 def build_payment_start_signature(*, telegram_id: int, plan_id: int, exp: int) -> str:
@@ -861,225 +394,143 @@ def build_payment_start_url(*, telegram_id: int, plan_id: int) -> str:
     return f"{base}/api/v1/payments/click/start/?{query}"
 
 
-class ClickPaymentService:
-    """Click hosted-payment link and Merchant API callback verification.
-
-    Click amounts are expressed in UZS (not tiyins).  A payment link contains
-    only the order reference; the amount is always revalidated server-side in
-    the callback before a subscription is enabled.
-    """
-
-    def is_configured(self):
-        return bool(
-            settings.CLICK_SERVICE_ID
-            and settings.CLICK_MERCHANT_ID
-            and settings.CLICK_MERCHANT_USER_ID
-            and settings.CLICK_SECRET_KEY
-        )
-
-    def missing_config_fields(self):
-        return [
-            name
-            for name, value in (
-                ("CLICK_SERVICE_ID", settings.CLICK_SERVICE_ID),
-                ("CLICK_MERCHANT_ID", settings.CLICK_MERCHANT_ID),
-                ("CLICK_MERCHANT_USER_ID", settings.CLICK_MERCHANT_USER_ID),
-                ("CLICK_SECRET_KEY", settings.CLICK_SECRET_KEY),
-            )
-            if not value
-        ]
-
-    @staticmethod
-    def amount_string(amount) -> str:
-        return format(Decimal(str(amount)).quantize(Decimal("0.01")), "f")
-
-    def payment_url(self, order):
-        if not self.is_configured():
-            missing = ", ".join(self.missing_config_fields())
-            raise ValueError(f"Click is not configured: {missing}")
-        query = urlencode(
-            {
-                "service_id": settings.CLICK_SERVICE_ID,
-                "merchant_id": settings.CLICK_MERCHANT_ID,
-                "amount": self.amount_string(order.amount),
-                "transaction_param": order.merchant_order_id,
-                "return_url": settings.CLICK_RETURN_URL,
-            }
-        )
-        return f"{settings.CLICK_PAYMENT_URL}?{query}"
-
-    def is_valid_signature(self, payload) -> bool:
-        """Validate Click's documented MD5 callback signature."""
-        try:
-            action = str(payload["action"])
-            parts = [
-                str(payload["click_trans_id"]),
-                str(payload["service_id"]),
-                settings.CLICK_SECRET_KEY,
-                str(payload["merchant_trans_id"]),
-            ]
-            if action == "1":
-                parts.append(str(payload["merchant_prepare_id"]))
-            parts.extend((str(payload["amount"]), action, str(payload["sign_time"])))
-            expected = hashlib.md5("".join(parts).encode("utf-8")).hexdigest()
-            return hmac.compare_digest(expected, str(payload.get("sign_string", "")).lower())
-        except (KeyError, TypeError):
-            return False
+def build_order_checkout_url(order) -> str:
+    """Public URL of the checkout page for one specific order."""
+    base = _public_api_base_url()
+    if not base or not order.order_id:
+        return ""
+    return f"{base}/api/v1/payments/click/checkout/{order.order_id}/"
 
 
-def create_click_order(*, user, plan):
-    """Create the local order then send the customer to Click's hosted page."""
-    order = AtmosOrder.objects.create(
-        user=user,
-        plan=plan,
-        merchant_order_id=generate_merchant_order_id(user),
-        amount=plan.price,
-        currency=plan.currency,
-        status=AtmosOrder.Status.CREATED,
-    )
-    try:
-        order.payment_url = ClickPaymentService().payment_url(order)
-        order.status = AtmosOrder.Status.PENDING
-    except ValueError as exc:
-        order.response_payload = {"error": str(exc)}
-    order.save(update_fields=("payment_url", "response_payload", "status", "updated_at"))
-    return order
+def build_bot_payment_url(order) -> str:
+    """Link the bot puts in a button: always our own checkout page, never Click's."""
+    if order.checkout_url:
+        return order.checkout_url.strip()
+    return build_order_checkout_url(order)
+
+
+def click_checkout_context(order) -> dict:
+    """Everything the checkout template needs to render the Click form."""
+    plan = order.plan
+    service = ClickPaymentService()
+    return {
+        "order": order,
+        "plan_name": plan.name if plan else "Deenify Premium",
+        "plan_description": (plan.description if plan else "") or "",
+        "amount": service.amount_string(order.amount),
+        "amount_display": f"{order.amount:,.2f}".replace(",", " "),
+        "currency": order.currency,
+        "form_action": settings.CLICK_PAYMENT_URL,
+        "form_fields": service.checkout_form_fields(order),
+        "bot_url": settings.CLICK_BOT_URL or "https://t.me/DeenifyUzBot",
+    }
 
 
 def process_click_callback(payload):
-    """Handle both Click Prepare (action=0) and Complete (action=1) calls."""
+    """Handle Click's Merchant API calls: Prepare (action=0) and Complete (action=1)."""
     service = ClickPaymentService()
     base = {
         "click_trans_id": str(payload.get("click_trans_id", "")),
         "merchant_trans_id": str(payload.get("merchant_trans_id", "")),
     }
+
     if str(payload.get("service_id", "")) != str(settings.CLICK_SERVICE_ID):
         return {**base, "error": -8, "error_note": "Error in service_id"}
+    if settings.CLICK_MERCHANT_ID and str(payload.get("merchant_id", "")) != str(
+        settings.CLICK_MERCHANT_ID
+    ):
+        return {**base, "error": -7, "error_note": "Error in merchant_id"}
     if not service.is_valid_signature(payload):
+        logger.warning("Click callback signature check failed %s", base)
         return {**base, "error": -1, "error_note": "SIGN CHECK FAILED!"}
 
-    order = AtmosOrder.objects.select_related("plan").filter(
-        merchant_order_id=base["merchant_trans_id"]
-    ).first()
+    order = (
+        ClickOrder.objects.select_related("plan", "user")
+        .filter(merchant_order_id=base["merchant_trans_id"])
+        .first()
+    )
     if not order:
         return {**base, "error": -5, "error_note": "User does not exist"}
     if service.amount_string(payload.get("amount", "0")) != service.amount_string(order.amount):
+        logger.warning(
+            "Click callback amount mismatch order=%s callback=%s expected=%s",
+            order.merchant_order_id,
+            payload.get("amount"),
+            order.amount,
+        )
         return {**base, "error": -2, "error_note": "Incorrect parameter amount"}
 
     action = str(payload.get("action", ""))
-    if action == "0":  # Prepare: reserve the order, do not grant premium yet.
-        if order.status not in (AtmosOrder.Status.CREATED, AtmosOrder.Status.PENDING, AtmosOrder.Status.PAID):
+    if action == "0":  # Prepare: validate the order, do not grant premium yet.
+        if order.status not in (
+            ClickOrder.Status.CREATED,
+            ClickOrder.Status.PENDING,
+            ClickOrder.Status.PAID,
+        ):
             return {**base, "error": -9, "error_note": "Transaction cancelled"}
         return {**base, "merchant_prepare_id": order.pk, "error": 0, "error_note": "Success"}
-    if action == "1":  # Complete: Click has successfully charged the customer.
+
+    if action == "1":  # Complete: Click has charged the customer.
         if str(payload.get("merchant_prepare_id", "")) != str(order.pk):
             return {**base, "error": -6, "error_note": "Transaction does not exist"}
         if str(payload.get("error", "0")) != "0":
-            order.status = AtmosOrder.Status.FAILED
-            order.response_payload = {"click_callback": dict(payload)}
-            order.save(update_fields=("status", "response_payload", "updated_at"))
-            return {**base, "merchant_confirm_id": order.pk, "error": -9, "error_note": "Transaction cancelled"}
-        order.mark_as_paid(
-            atmos_transaction_id=base["click_trans_id"],
-            payload={"click_callback": dict(payload)},
-        )
+            _mark_order_failed(order, {"click_callback": dict(payload)})
+            return {
+                **base,
+                "merchant_confirm_id": order.pk,
+                "error": -9,
+                "error_note": "Transaction cancelled",
+            }
+        if _click_trans_already_used(order, base["click_trans_id"]):
+            return {
+                **base,
+                "merchant_confirm_id": order.pk,
+                "error": -9,
+                "error_note": "Transaction cancelled",
+            }
+
+        _record_click_transaction(order, base["click_trans_id"], dict(payload))
+        order.mark_as_paid(click_trans_id=base["click_trans_id"], payload={"click_callback": dict(payload)})
         after_order_paid(order)
         return {**base, "merchant_confirm_id": order.pk, "error": 0, "error_note": "Success"}
+
     return {**base, "error": -3, "error_note": "Action not found"}
 
 
-def build_bot_payment_url(order):
-    """Click checkout URL already points to Click's public payment page."""
-    return (order.payment_url or "").strip()
-
-
-CARD_SESSION_TOKEN_TTL = 900
-
-
-def build_card_session_token(*, order_id: str, exp: int) -> str:
-    secret = (settings.BOT_API_SECRET or "").strip()
-    if not secret:
-        return ""
-    payload = f"{order_id}:{exp}"
-    return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
-
-
-def verify_card_session_token(*, order_id: str, exp: int, token: str) -> bool:
-    if not token or exp < int(time.time()):
+def _click_trans_already_used(order, click_trans_id) -> bool:
+    """A Click transaction may confirm exactly one order."""
+    if not click_trans_id:
         return False
-    expected = build_card_session_token(order_id=order_id, exp=exp)
-    if not expected:
-        return False
-    return hmac.compare_digest(expected, token)
-
-
-def start_card_payment(*, user, plan):
-    """Create Atmos transaction (merchant/pay/create) for the card form."""
-    order = create_atmos_order(user=user, plan=plan)
-    error = ""
-    raw = order.response_payload or {}
-    if isinstance(raw, dict) and raw.get("error"):
-        error = str(raw["error"])
-    if not order.atmos_transaction_id:
-        error = error or "Atmos did not return transaction id."
-    return order, error
-
-
-def submit_card_for_payment(*, order, card_number, expiry):
-    """Send card to Atmos pre-apply; Atmos sends OTP via SMS."""
-    service = AtmosPaymentService()
-    if not service.is_configured() or not order.atmos_transaction_id:
-        return {"ok": False, "error": "Payment is not configured."}
-    try:
-        raw = service.pre_apply(
-            transaction_id=order.atmos_transaction_id,
-            card_number=card_number,
-            expiry=expiry,
-        )
-    except (OSError, URLError, ValueError) as exc:
-        return {"ok": False, "error": service._format_request_error(exc)}
-    api_error = service._extract_api_error(raw)
-    if api_error:
-        return {"ok": False, "error": api_error, "raw": raw}
-    return {"ok": True, "raw": raw}
-
-
-def confirm_card_payment(*, order, otp):
-    """Confirm Atmos transaction with OTP (apply); activate subscription on success."""
-    service = AtmosPaymentService()
-    if not service.is_configured() or not order.atmos_transaction_id:
-        return {"ok": False, "error": "Payment is not configured."}
-    try:
-        raw = service.apply(transaction_id=order.atmos_transaction_id, otp=otp)
-    except (OSError, URLError, ValueError) as exc:
-        return {"ok": False, "error": service._format_request_error(exc)}
-    api_error = service._extract_api_error(raw)
-    store_transaction = raw.get("store_transaction") or {}
-    confirmed = bool(store_transaction.get("confirmed")) or service._is_success_code(
-        (raw.get("result") or {}).get("code")
+    return (
+        ClickOrder.objects.filter(click_trans_id=click_trans_id, status=ClickOrder.Status.PAID)
+        .exclude(pk=order.pk)
+        .exists()
     )
-    if api_error or not confirmed:
-        return {"ok": False, "error": api_error or "Payment was not confirmed.", "raw": raw}
 
-    transaction_id = str(
-        store_transaction.get("success_trans_id")
-        or store_transaction.get("trans_id")
-        or order.atmos_transaction_id
-    )
-    AtmosTransaction.objects.update_or_create(
+
+def _record_click_transaction(order, click_trans_id, payload):
+    if not click_trans_id:
+        return
+    ClickTransaction.objects.update_or_create(
         order=order,
-        transaction_id=transaction_id,
+        transaction_id=click_trans_id,
         defaults={
-            "status": AtmosTransaction.Status.SUCCESS,
+            "status": ClickTransaction.Status.SUCCESS,
             "amount": order.amount,
             "currency": order.currency,
-            "provider_payload": raw,
+            "provider_payload": payload,
             "performed_at": timezone.now(),
         },
     )
-    order.mark_as_paid(atmos_transaction_id=transaction_id, payload=raw)
-    after_order_paid(order)
-    return {"ok": True, "raw": raw}
+
+
+def _mark_order_failed(order, payload):
+    existing = order.response_payload if isinstance(order.response_payload, dict) else {}
+    order.status = ClickOrder.Status.FAILED
+    if payload:
+        existing["last_error_response"] = payload
+    order.response_payload = existing
+    order.save(update_fields=("status", "response_payload", "updated_at"))
 
 
 def _notify_payment_success_safe(order):
@@ -1107,356 +558,21 @@ def after_order_paid(order):
     _notify_payment_success_safe(order)
 
 
-# ---------------------------------------------------------------------------
-# Card binding + recurring (token) payments
-# ---------------------------------------------------------------------------
+def cancel_subscription(user) -> dict:
+    """End the current premium period.
 
-
-def start_card_binding(*, card_number, expiry):
-    """Begin Atmos card linking: /partner/bind-card/init (Atmos sends an SMS code)."""
-    service = AtmosPaymentService()
-    if not service.is_configured():
-        return {"ok": False, "error": "Payment is not configured."}
-    logger.info("Atmos bind-card/init: requesting card link (masked card ****%s)", str(card_number)[-4:])
-    try:
-        raw = service.bind_card_init(card_number=card_number, expiry=expiry)
-    except (OSError, URLError, ValueError) as exc:
-        logger.warning("Atmos bind-card/init failed: %s", service._format_request_error(exc))
-        return {"ok": False, "error": service._format_request_error(exc)}
-    api_error = service._extract_api_error(raw)
-    transaction_id = raw.get("transaction_id")
-    if api_error or not transaction_id:
-        logger.warning("Atmos bind-card/init rejected: error=%s raw=%s", api_error, raw)
-        return {"ok": False, "error": api_error or "Card binding could not be started.", "raw": raw}
-    logger.info("Atmos bind-card/init OK: transaction_id=%s", transaction_id)
-    return {
-        "ok": True,
-        "transaction_id": str(transaction_id),
-        "phone": raw.get("phone", ""),
-        "raw": raw,
-    }
-
-
-def _delete_other_bound_cards(user, *, keep_pk=None):
-    """Keep at most one active bound card row per user."""
-    qs = BoundCard.objects.filter(user=user)
-    if keep_pk is not None:
-        qs = qs.exclude(pk=keep_pk)
-    qs.delete()
-
-
-def _parse_bind_card_data(data: dict) -> dict | None:
-    card_token = data.get("card_token")
-    if not card_token:
-        return None
-    return {
-        "card_id": str(data.get("card_id") or ""),
-        "card_token": str(card_token),
-        "masked_pan": str(data.get("pan") or ""),
-        "expiry": str(data.get("expiry") or ""),
-        "card_holder": str(data.get("card_holder") or ""),
-        "phone": str(data.get("phone") or ""),
-    }
-
-
-def _persist_bound_card(user, card_data: dict) -> BoundCard:
-    """Save Atmos card token after a successful charge (one active card per user)."""
-    with transaction.atomic():
-        bound = BoundCard.objects.create(
-            user=user,
-            card_id=card_data["card_id"],
-            card_token=card_data["card_token"],
-            masked_pan=card_data.get("masked_pan", ""),
-            expiry=card_data.get("expiry", ""),
-            card_holder=card_data.get("card_holder", ""),
-            phone=card_data.get("phone", ""),
-            is_active=True,
-        )
-        _delete_other_bound_cards(user, keep_pk=bound.pk)
-    return bound
-
-
-def _unlink_atmos_card(*, card_id: str, card_token: str, user_label: str = "") -> str:
-    """Detach a card token at Atmos. Returns an error string, or empty on success."""
-    if not card_id or not card_token:
-        return ""
-    service = AtmosPaymentService()
-    if not service.is_configured():
-        return ""
-    logger.info("Atmos remove-card: %s card_id=%s", user_label or "ephemeral", card_id)
-    try:
-        raw = service.remove_card(card_id=card_id, card_token=card_token)
-        error = service._extract_api_error(raw)
-        if error:
-            logger.warning(
-                "Atmos remove-card rejected %s: %s", user_label or "ephemeral", error
-            )
-        else:
-            logger.info("Atmos remove-card OK: %s card_id=%s", user_label or "ephemeral", card_id)
-        return error or ""
-    except (OSError, URLError, ValueError) as exc:
-        error = service._format_request_error(exc)
-        logger.warning("Atmos remove-card failed %s: %s", user_label or "ephemeral", error)
-        return error
-
-
-def _rollback_ephemeral_card(*, card_data: dict | None, is_auto_renewal: bool, user_label: str = ""):
-    """Drop a just-bound token when the first charge did not complete."""
-    if not card_data or is_auto_renewal:
-        return
-    _unlink_atmos_card(
-        card_id=card_data["card_id"],
-        card_token=card_data["card_token"],
-        user_label=user_label,
-    )
-
-
-def confirm_card_binding(*, user, transaction_id, otp):
-    """Confirm card linking with the SMS code (Atmos token only — not saved until paid)."""
-    service = AtmosPaymentService()
-    if not service.is_configured():
-        return {"ok": False, "error": "Payment is not configured."}
-    logger.info("Atmos bind-card/confirm: transaction_id=%s", transaction_id)
-    try:
-        raw = service.bind_card_confirm(transaction_id=transaction_id, otp=otp)
-    except (OSError, URLError, ValueError) as exc:
-        logger.warning("Atmos bind-card/confirm failed: %s", service._format_request_error(exc))
-        return {"ok": False, "error": service._format_request_error(exc)}
-    api_error = service._extract_api_error(raw)
-    data = raw.get("data") or {}
-    card_data = _parse_bind_card_data(data)
-    if api_error or not card_data:
-        logger.warning("Atmos bind-card/confirm rejected: error=%s raw=%s", api_error, raw)
-        return {"ok": False, "error": api_error or "Card binding failed.", "raw": raw}
-    logger.info(
-        "Atmos bind-card/confirm OK: card_id=%s pan=%s (not persisted until paid)",
-        card_data["card_id"],
-        card_data["masked_pan"],
-    )
-    return {"ok": True, "card_data": card_data, "raw": raw}
-
-
-def charge_subscription(
-    *,
-    user,
-    plan,
-    bound_card=None,
-    card_data=None,
-    is_auto_renewal=False,
-):
-    """Charge a bound card for a subscription period via merchant/pay/{create,pre-apply,apply}."""
-    service = AtmosPaymentService()
-    if not service.is_configured():
-        return {"ok": False, "error": "Payment is not configured."}
-    if bool(bound_card) == bool(card_data):
-        return {"ok": False, "error": "Provide bound_card or card_data, not both."}
-
-    ephemeral = card_data is not None
-    if bound_card:
-        if not bound_card.card_token:
-            return {"ok": False, "error": "No bound card available."}
-        charge_card_id = bound_card.card_id
-        charge_card_token = bound_card.card_token
-    else:
-        charge_card_id = card_data["card_id"]
-        charge_card_token = card_data["card_token"]
-        if not charge_card_token:
-            return {"ok": False, "error": "No card token available."}
-
-    user_label = str(getattr(user, "telegram_id", user.pk))
-
-    order = create_atmos_order(user=user, plan=plan)
-    order.is_auto_renewal = is_auto_renewal
-    if bound_card:
-        order.bound_card = bound_card
-    order.save(update_fields=("bound_card", "is_auto_renewal", "updated_at"))
-    logger.info(
-        "Atmos token charge: user=%s order=%s plan=%s auto=%s card_id=%s ephemeral=%s",
-        user.telegram_id,
-        order.merchant_order_id,
-        plan.id,
-        is_auto_renewal,
-        charge_card_id,
-        ephemeral,
-    )
-
-    if not order.atmos_transaction_id:
-        error = ""
-        raw = order.response_payload or {}
-        if isinstance(raw, dict) and raw.get("error"):
-            error = str(raw["error"])
-        _rollback_ephemeral_card(
-            card_data=card_data, is_auto_renewal=is_auto_renewal, user_label=user_label
-        )
-        return {"ok": False, "error": error or "Atmos did not return transaction id.", "order": order}
-
-    pre_request = {
-        "store_id": int(service._normalize_store_id(service.store_id)),
-        "transaction_id": int(order.atmos_transaction_id),
-        "card_token": _mask_atmos_secret(charge_card_token),
-    }
-    try:
-        pre_raw = service.pre_apply(
-            transaction_id=order.atmos_transaction_id,
-            card_token=charge_card_token,
-        )
-    except (OSError, URLError, ValueError) as exc:
-        _rollback_ephemeral_card(
-            card_data=card_data, is_auto_renewal=is_auto_renewal, user_label=user_label
-        )
-        return {"ok": False, "error": service._format_request_error(exc), "order": order}
-    _append_atmos_trace(
-        order,
-        step="merchant/pay/pre-apply",
-        request=pre_request,
-        response=pre_raw,
-    )
-    order.save(update_fields=("response_payload", "updated_at"))
-    pre_error = service._extract_api_error(pre_raw)
-    if pre_error:
-        logger.warning(
-            "Atmos pre-apply rejected order=%s error=%s raw=%s",
-            order.merchant_order_id,
-            pre_error,
-            pre_raw,
-        )
-        _mark_order_failed(order, pre_raw)
-        _rollback_ephemeral_card(
-            card_data=card_data, is_auto_renewal=is_auto_renewal, user_label=user_label
-        )
-        return {"ok": False, "error": pre_error, "order": order, "raw": pre_raw}
-
-    apply_request = {
-        "store_id": int(service._normalize_store_id(service.store_id)),
-        "transaction_id": int(order.atmos_transaction_id),
-        "otp": _mask_atmos_secret(settings.ATMOS_TOKEN_PAYMENT_OTP),
-    }
-    try:
-        raw = service.apply(
-            transaction_id=order.atmos_transaction_id,
-            otp=settings.ATMOS_TOKEN_PAYMENT_OTP,
-        )
-    except (OSError, URLError, ValueError) as exc:
-        _rollback_ephemeral_card(
-            card_data=card_data, is_auto_renewal=is_auto_renewal, user_label=user_label
-        )
-        return {"ok": False, "error": service._format_request_error(exc), "order": order}
-    _append_atmos_trace(
-        order,
-        step="merchant/pay/apply",
-        request=apply_request,
-        response=raw,
-    )
-
-    api_error = service._extract_api_error(raw)
-    store_transaction = raw.get("store_transaction") or {}
-    confirmed = bool(store_transaction.get("confirmed")) or service._is_success_code(
-        (raw.get("result") or {}).get("code")
-    )
-    if api_error or not confirmed:
-        logger.warning(
-            "Atmos apply rejected order=%s error=%s raw=%s",
-            order.merchant_order_id,
-            api_error,
-            raw,
-        )
-        _mark_order_failed(order, raw)
-        _rollback_ephemeral_card(
-            card_data=card_data, is_auto_renewal=is_auto_renewal, user_label=user_label
-        )
-        return {"ok": False, "error": api_error or "Payment was not confirmed.", "order": order, "raw": raw}
-
-    if ephemeral:
-        bound_card = _persist_bound_card(user, card_data)
-        order.bound_card = bound_card
-        order.save(update_fields=("bound_card", "updated_at"))
-
-    order.save(update_fields=("response_payload", "updated_at"))
-    transaction_id = str(
-        store_transaction.get("success_trans_id")
-        or store_transaction.get("trans_id")
-        or order.atmos_transaction_id
-    )
-    AtmosTransaction.objects.update_or_create(
-        order=order,
-        transaction_id=transaction_id,
-        defaults={
-            "status": AtmosTransaction.Status.SUCCESS,
-            "amount": order.amount,
-            "currency": order.currency,
-            "provider_payload": raw,
-            "performed_at": timezone.now(),
-        },
-    )
-    subscription = order.mark_as_paid(
-        atmos_transaction_id=transaction_id,
-        payload=_order_trace_payload(order),
-    )
-    after_order_paid(order)
-    return {"ok": True, "order": order, "subscription": subscription, "raw": raw}
-
-
-def _mask_atmos_secret(value) -> str:
-    text = str(value or "").strip()
-    if len(text) <= 8:
-        return "***"
-    return f"{text[:4]}...{text[-4:]}"
-
-
-def _order_trace_payload(order) -> dict:
-    if isinstance(order.response_payload, dict):
-        return dict(order.response_payload)
-    return {}
-
-
-def _init_atmos_trace(order, *, step: str, request: dict, response: dict, error: str = "") -> None:
-    payload = {
-        "atmos_trace": [{"step": step, "request": request, "response": response}],
-        "last_step": step,
-    }
-    if error:
-        payload["error"] = error
-    order.response_payload = payload
-
-
-def _append_atmos_trace(order, *, step: str, request: dict, response: dict) -> None:
-    payload = _order_trace_payload(order)
-    trace = list(payload.get("atmos_trace") or [])
-    trace.append({"step": step, "request": request, "response": response})
-    payload["atmos_trace"] = trace
-    payload["last_step"] = step
-    order.response_payload = payload
-
-
-def _mark_order_failed(order, payload):
-    order.status = AtmosOrder.Status.FAILED
-    existing = _order_trace_payload(order)
-    if payload:
-        existing["last_error_response"] = payload
-        if isinstance(payload, dict) and payload.get("result"):
-            existing["result"] = payload["result"]
-    order.response_payload = existing
-    order.save(update_fields=("status", "response_payload", "updated_at"))
-
-
-def remove_bound_card(user):
-    """Stop automatic renewal without making any legacy provider request.
-
-    Click hosted checkout does not create reusable card tokens.  Old Atmos card
-    rows may still exist in the database for accounting, but cancelling a
-    current subscription must never contact Atmos.
+    Click charges once per purchase, so there is nothing to unbind or refund.
+    Cancelling disables the active subscription right away: the user no longer
+    gets premium features, and no automatic renewal exists to stop.
     """
-    card = (
-        BoundCard.objects.filter(user=user, is_active=True)
-        .order_by("-created_at")
-        .first()
+    subscription = get_active_premium_subscription(user)
+    if not subscription:
+        return {"ok": True, "had_premium": False, "expires_at": None}
+    expires_at = subscription.expires_at
+    UserPremiumSubscription.objects.filter(pk=subscription.pk).update(
+        is_active=False, updated_at=timezone.now()
     )
-    if card:
-        card.mark_removed()
-    UserPremiumSubscription.objects.filter(user=user, is_active=True, auto_renew=True).update(
-        auto_renew=False
-    )
-    return {"ok": True, "removed": bool(card), "error": ""}
+    return {"ok": True, "had_premium": True, "expires_at": expires_at}
 
 
 # ---------------------------------------------------------------------------
@@ -1502,7 +618,6 @@ def extend_premium_days(*, user, days, source=UserPremiumSubscription.Source.REF
             starts_at=now,
             expires_at=now + timedelta(days=days),
             is_active=True,
-            auto_renew=False,
             source=source,
         )
 
@@ -1515,9 +630,9 @@ def grant_referral_reward(order):
         return None
 
     days = (
-        settings.ATMOS_REFERRAL_BONUS_DAYS_YEARLY
+        settings.CLICK_REFERRAL_BONUS_DAYS_YEARLY
         if _plan_is_yearly(order.plan)
-        else settings.ATMOS_REFERRAL_BONUS_DAYS_MONTHLY
+        else settings.CLICK_REFERRAL_BONUS_DAYS_MONTHLY
     )
 
     with transaction.atomic():
@@ -1550,8 +665,8 @@ def get_referral_stats(user):
         )
         .count()
     )
-    monthly = settings.ATMOS_REFERRAL_BONUS_DAYS_MONTHLY
-    yearly = settings.ATMOS_REFERRAL_BONUS_DAYS_YEARLY
+    monthly = settings.CLICK_REFERRAL_BONUS_DAYS_MONTHLY
+    yearly = settings.CLICK_REFERRAL_BONUS_DAYS_YEARLY
     return {
         "invited_count": invited_qs.count(),
         "paid_count": paid_count,
@@ -1561,326 +676,30 @@ def get_referral_stats(user):
     }
 
 
-def parse_atmos_callback_payload(request) -> dict:
-    """Normalize Atmos callback body (JSON object, raw JSON string, or wrapped field)."""
-    data = getattr(request, "data", None)
-    if isinstance(data, dict) and data:
-        if not any(
-            key in data
-            for key in ("store_id", "transaction_id", "sign", "account", "invoice", "amount")
-        ):
-            for value in data.values():
-                if isinstance(value, str) and value.strip().startswith("{"):
-                    try:
-                        parsed = json.loads(value)
-                        if isinstance(parsed, dict):
-                            return parsed
-                    except json.JSONDecodeError:
-                        continue
-        return data
-    if isinstance(data, str) and data.strip():
-        try:
-            parsed = json.loads(data)
-            if isinstance(parsed, dict):
-                return parsed
-        except json.JSONDecodeError:
-            pass
-    body = getattr(request, "body", b"") or b""
-    if body:
-        try:
-            parsed = json.loads(body.decode("utf-8"))
-            if isinstance(parsed, dict):
-                return parsed
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            pass
-    return {}
+# ---------------------------------------------------------------------------
+# Housekeeping
+# ---------------------------------------------------------------------------
 
 
-def _atmos_callback_ok_message() -> str:
-    return settings.ATMOS_CALLBACK_SUCCESS_MESSAGE
-
-
-def extract_callback_value(payload, *keys):
-    for key in keys:
-        value = payload.get(key)
-        if value not in (None, ""):
-            return value
-    return ""
-
-
-def _callback_invoice_for_sign(payload) -> str:
-    """Atmos callback: invoice id is sent as ``invoice`` or ``account``."""
-    return str(
-        extract_callback_value(
-            payload,
-            "invoice",
-            "account",
-            "merchant_order_id",
-            "order_id",
-            "store_order_id",
-        )
-    )
-
-
-def calculate_atmos_sign(payload):
-    api_key = settings.ATMOS_API_KEY
-    algorithm = settings.ATMOS_SIGN_ALGORITHM.lower()
-    source = "".join(
-        [
-            str(extract_callback_value(payload, "store_id")),
-            str(extract_callback_value(payload, "transaction_id")),
-            _callback_invoice_for_sign(payload),
-            str(extract_callback_value(payload, "amount")),
-            api_key,
-        ]
-    )
-    try:
-        digest = hashlib.new(algorithm)
-    except ValueError:
-        digest = hashlib.md5()
-    digest.update(source.encode("utf-8"))
-    return digest.hexdigest()
-
-
-def validate_atmos_callback_sign(payload):
-    expected_sign = extract_callback_value(payload, "sign")
-    api_key = settings.ATMOS_API_KEY
-
-    if not api_key:
-        if settings.ATMOS_TEST_MODE:
-            logger.warning("ATMOS_API_KEY is not set; accepting callback in ATMOS_TEST_MODE.")
-            return True
-        logger.error("ATMOS_API_KEY is not configured; Atmos callback rejected.")
-        return False
-
-    if not expected_sign:
-        logger.warning("Atmos callback missing sign field.")
-        return False
-
-    calculated = calculate_atmos_sign(payload).lower()
-    if hmac.compare_digest(str(expected_sign).lower(), calculated):
-        return True
-
-    logger.warning(
-        "Atmos callback signature mismatch store_id=%s transaction_id=%s account=%s "
-        "algorithm=%s received_sign=%s calculated_sign=%s",
-        extract_callback_value(payload, "store_id"),
-        extract_callback_value(payload, "transaction_id"),
-        _callback_invoice_for_sign(payload),
-        settings.ATMOS_SIGN_ALGORITHM,
-        expected_sign,
-        calculated,
-    )
-    return False
-
-
-def sync_atmos_order_payment(order) -> bool:
-    """Poll merchant/pay/get and activate subscription when Atmos confirms payment."""
-    if not order.atmos_transaction_id or order.status == AtmosOrder.Status.PAID:
-        return order.status == AtmosOrder.Status.PAID
-
-    service = AtmosPaymentService()
-    if not service.is_configured():
-        return False
-
-    try:
-        raw = service.get_merchant_transaction(order.atmos_transaction_id)
-    except (OSError, URLError, ValueError) as exc:
-        logger.warning(
-            "Atmos merchant/pay/get failed order=%s: %s",
-            order.merchant_order_id,
-            exc,
-        )
-        return False
-
-    store_transaction = raw.get("store_transaction") or {}
-    if not store_transaction.get("confirmed"):
-        return False
-
-    transaction_id = str(
-        store_transaction.get("success_trans_id")
-        or store_transaction.get("trans_id")
-        or order.atmos_transaction_id
-    )
-    AtmosTransaction.objects.update_or_create(
-        order=order,
-        transaction_id=transaction_id,
-        defaults={
-            "status": AtmosTransaction.Status.SUCCESS,
-            "amount": order.amount,
-            "currency": order.currency,
-            "provider_payload": raw,
-            "performed_at": timezone.now(),
-        },
-    )
-    order.mark_as_paid(atmos_transaction_id=transaction_id, payload=raw)
-    after_order_paid(order)
-    return True
-
-
-@transaction.atomic
-def process_atmos_callback(payload):
-    """
-    Atmos Callback API (docs.atmos.uz): validate invoice before payment.
-    Response must be {"status": 1, "message": "Успешно"} to allow payment.
-    """
-    if isinstance(payload, str):
-        try:
-            payload = json.loads(payload)
-        except json.JSONDecodeError:
-            payload = {}
-    if not isinstance(payload, dict):
-        payload = {}
-
-    ok_message = _atmos_callback_ok_message()
-    logger.info(
-        "Atmos callback: store_id=%s transaction_id=%s account=%s amount=%s",
-        extract_callback_value(payload, "store_id"),
-        extract_callback_value(payload, "transaction_id"),
-        _callback_invoice_for_sign(payload),
-        extract_callback_value(payload, "amount"),
-    )
-
-    merchant_order_id = extract_callback_value(
-        payload,
-        "invoice",
-        "merchant_order_id",
-        "account",
-        "order_id",
-        "store_order_id",
-    )
-    transaction_id = extract_callback_value(
-        payload,
-        "transaction_id",
-        "trans_id",
-        "payment_id",
-        "id",
-    )
-    raw_amount = extract_callback_value(payload, "amount", "total", "sum")
-
-    if not validate_atmos_callback_sign(payload):
-        logger.warning("Atmos callback rejected: invalid signature")
-        return {
-            "ok": False,
-            "atmos_status": 0,
-            "message": "Invalid signature",
-            "http_status": 200,
-        }
-
-    order_query = None
-    if merchant_order_id:
-        order_query = Q(merchant_order_id=merchant_order_id) | Q(order_id=merchant_order_id)
-    if transaction_id:
-        transaction_query = Q(atmos_transaction_id=str(transaction_id))
-        order_query = transaction_query if order_query is None else order_query | transaction_query
-    if not order_query:
-        return {
-            "ok": False,
-            "atmos_status": 0,
-            "message": "Invoice not found",
-            "http_status": 200,
-        }
-
-    order = (
-        AtmosOrder.objects.select_for_update()
-        .select_related("user", "plan")
-        .filter(order_query)
-        .first()
-    )
-    if not order:
-        return {
-            "ok": False,
-            "atmos_status": 0,
-            "message": "Invoice not found",
-            "http_status": 200,
-        }
-
-    try:
-        callback_amount_tiyin = int(Decimal(str(raw_amount))) if raw_amount != "" else amount_to_tiyin(order.amount)
-    except Exception:
-        callback_amount_tiyin = -1
-    if callback_amount_tiyin != amount_to_tiyin(order.amount):
-        return {
-            "ok": False,
-            "atmos_status": 0,
-            "message": "Invalid amount",
-            "http_status": 200,
-        }
-
-    if order.status == AtmosOrder.Status.PAID:
-        return {
-            "ok": True,
-            "atmos_status": 1,
-            "message": ok_message,
-            "http_status": 200,
-            "order": order,
-        }
-
-    if order.status not in (
-        AtmosOrder.Status.CREATED,
-        AtmosOrder.Status.PENDING,
-    ):
-        logger.warning(
-            "Atmos callback rejected: order %s status=%s",
-            order.merchant_order_id,
-            order.status,
-        )
-        return {
-            "ok": False,
-            "atmos_status": 0,
-            "message": "Invoice not available",
-            "http_status": 200,
-        }
-
-    update_fields = ["response_payload", "updated_at"]
-    callback_response = {"status": 1, "message": ok_message}
-    _append_atmos_trace(
-        order,
-        step="callback (Atmos -> merchant)",
-        request=payload,
-        response=callback_response,
-    )
-    if transaction_id and str(order.atmos_transaction_id) != str(transaction_id):
-        order.atmos_transaction_id = str(transaction_id)
-        update_fields.append("atmos_transaction_id")
-    if order.status == AtmosOrder.Status.CREATED:
-        order.status = AtmosOrder.Status.PENDING
-        update_fields.append("status")
-    order.save(update_fields=update_fields)
-
-    logger.info(
-        "Atmos callback validated order=%s transaction_id=%s",
-        order.merchant_order_id,
-        transaction_id,
-    )
-    return {
-        "ok": True,
-        "atmos_status": 1,
-        "message": ok_message,
-        "http_status": 200,
-        "order": order,
-    }
-
-
-def cleanup_stale_atmos_orders(*, days=None, all_unpaid=False, dry_run=False):
-    """Remove unpaid Atmos orders (and their transactions) to keep the admin tidy.
+def cleanup_stale_click_orders(*, days=None, all_unpaid=False, dry_run=False):
+    """Remove unpaid Click orders (and their transactions) to keep the admin tidy.
 
     Paid orders are never deleted. By default only orders older than
-    ``ATMOS_STALE_ORDER_RETENTION_DAYS`` are removed.
+    ``CLICK_STALE_ORDER_RETENTION_DAYS`` are removed.
     """
     from datetime import timedelta
 
     retention_days = (
-        settings.ATMOS_STALE_ORDER_RETENTION_DAYS if days is None else days
+        settings.CLICK_STALE_ORDER_RETENTION_DAYS if days is None else days
     )
     unpaid_statuses = (
-        AtmosOrder.Status.CREATED,
-        AtmosOrder.Status.PENDING,
-        AtmosOrder.Status.FAILED,
-        AtmosOrder.Status.CANCELED,
-        AtmosOrder.Status.EXPIRED,
+        ClickOrder.Status.CREATED,
+        ClickOrder.Status.PENDING,
+        ClickOrder.Status.FAILED,
+        ClickOrder.Status.CANCELED,
+        ClickOrder.Status.EXPIRED,
     )
-    qs = AtmosOrder.objects.filter(status__in=unpaid_statuses)
+    qs = ClickOrder.objects.filter(status__in=unpaid_statuses)
     if not all_unpaid:
         cutoff = timezone.now() - timedelta(days=retention_days)
         qs = qs.filter(created_at__lt=cutoff)
@@ -1889,14 +708,14 @@ def cleanup_stale_atmos_orders(*, days=None, all_unpaid=False, dry_run=False):
     if dry_run:
         return {
             "orders": order_count,
-            "transactions": AtmosTransaction.objects.filter(order__in=qs).count(),
+            "transactions": ClickTransaction.objects.filter(order__in=qs).count(),
             "dry_run": True,
         }
 
     deleted_total, breakdown = qs.delete()
     return {
-        "orders": breakdown.get("users.AtmosOrder", 0),
-        "transactions": breakdown.get("users.AtmosTransaction", 0),
+        "orders": breakdown.get("users.ClickOrder", 0),
+        "transactions": breakdown.get("users.ClickTransaction", 0),
         "deleted_total": deleted_total,
         "dry_run": False,
     }
@@ -1930,7 +749,7 @@ def cleanup_expired_offer_messages(*, ttl_seconds=None, dry_run=False):
 def get_admin_statistics():
     now = timezone.now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    paid_orders = AtmosOrder.objects.filter(status=AtmosOrder.Status.PAID)
+    paid_orders = ClickOrder.objects.filter(status=ClickOrder.Status.PAID)
     total_revenue = paid_orders.aggregate(total=Sum("amount"))["total"] or 0
     today_revenue = paid_orders.filter(paid_at__gte=today_start).aggregate(total=Sum("amount"))["total"] or 0
 
@@ -1949,9 +768,9 @@ def get_admin_statistics():
         .distinct()
         .count(),
         "blocked_users": TelegramUser.objects.filter(is_blocked=True).count(),
-        "total_orders": AtmosOrder.objects.count(),
+        "total_orders": ClickOrder.objects.count(),
         "paid_orders": paid_orders.count(),
-        "failed_orders": AtmosOrder.objects.filter(status=AtmosOrder.Status.FAILED).count(),
+        "failed_orders": ClickOrder.objects.filter(status=ClickOrder.Status.FAILED).count(),
         "total_revenue": total_revenue,
         "today_revenue": today_revenue,
     }

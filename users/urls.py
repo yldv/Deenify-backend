@@ -2,9 +2,6 @@ from django.urls import path
 
 from .views import (
     AdminStatisticsView,
-    ClickOrderCreateView,
-    ClickCallbackView,
-    ClickPaymentStartView,
     BotUserBotActiveView,
     BotUserCancelSubscriptionView,
     BotUserDetailView,
@@ -15,6 +12,11 @@ from .views import (
     BotUserReferralView,
     BotUserStatisticsView,
     BotUserView,
+    ClickCallbackView,
+    ClickOrderCheckoutView,
+    ClickOrderCreateView,
+    ClickPaymentStartView,
+    ClickReturnView,
     SubscriptionPlanListView,
 )
 
@@ -81,9 +83,19 @@ urlpatterns = [
         name="click-payment-start",
     ),
     path(
+        "api/v1/payments/click/checkout/<str:order_id>/",
+        ClickOrderCheckoutView.as_view(),
+        name="click-order-checkout",
+    ),
+    path(
         "api/v1/payments/click/callback/",
         ClickCallbackView.as_view(),
         name="click-callback",
+    ),
+    path(
+        "api/v1/payments/click/return/",
+        ClickReturnView.as_view(),
+        name="click-return",
     ),
     path(
         "api/v1/admin/statistics/",

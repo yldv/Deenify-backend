@@ -150,19 +150,21 @@ sudo systemctl status deenify-web deenify-bot
 sudo journalctl -u deenify-bot -f
 ```
 
-### Автосписания подписок (bind-card)
+### Оплата подписки (Click)
 
-Подписки продлеваются по токену привязанной карты. Atmos списывает по инициативе
-мерчанта, поэтому нужен ежедневный запуск команды `charge_due_subscriptions` через
-systemd timer:
+Click не хранит карту и не списывает её автоматически: каждая подписка — это
+одна оплата на нашей собственной странице оплаты. Продление пользователь
+подтверждает сам (кнопка в боте → `/api/v1/payments/click/start/`).
+
+Проверить, что всё настроено (ничего не отправляет в Click, только локальная проверка):
 
 ```bash
-sudo cp deploy/systemd/deenify-billing.service /etc/systemd/system/
-sudo cp deploy/systemd/deenify-billing.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now deenify-billing.timer
-sudo systemctl list-timers deenify-billing.timer   # проверить расписание
+cd /var/www/deenify
+sudo -u deenify .venv/bin/python manage.py check_click
 ```
+
+Если команда пишет `Missing .env: ...` — заполните значения в `/var/www/deenify/.env`
+и перезапустите `sudo systemctl restart deenify-web`.
 
 ### Очистка неоплаченных заказов (админка)
 
@@ -183,13 +185,13 @@ sudo systemctl enable --now deenify-cleanup-orders.timer
 ```bash
 cd /var/www/deenify
 source .venv/bin/activate
-python manage.py cleanup_stale_atmos_orders --all-unpaid --dry-run
-python manage.py cleanup_stale_atmos_orders --all-unpaid
+python manage.py cleanup_stale_click_orders --all-unpaid --dry-run
+python manage.py cleanup_stale_click_orders --all-unpaid
 ```
 
 В админке: выделить заказы → action **«Delete selected unpaid orders»**.
 
-Переменная `.env`: `ATMOS_STALE_ORDER_RETENTION_DAYS=1`
+Переменная `.env`: `CLICK_STALE_ORDER_RETENTION_DAYS=1`
 
 ### Автоудаление каталога тарифов в Telegram (если не купил)
 
@@ -216,118 +218,77 @@ python manage.py cleanup_expired_offer_messages --dry-run
 > **Нужно ли дропать всю БД перед prod?** Обычно **нет**. Достаточно удалить неоплаченные заказы командой выше.
 > Полный сброс (`DROP DATABASE` / `flush`) — только если **все** пользователи и подписки тестовые и их можно потерять.
 
-### Тест автосписания (месячная подписка за 15 минут)
+### Тест короткой подписки (месячная за 15 минут)
 
 Временно в `.env` (годовая подписка остаётся на 365 дней):
 
 ```env
 DEENIFY_TEST_MONTHLY_RENEWAL_MINUTES=15
-ATMOS_RENEW_LEAD_MINUTES=0
-ATMOS_RENEW_FAIL_GRACE_MINUTES=30
 ```
-
-Перезапустить web/bot, включить частый таймер вместо ежедневного:
 
 ```bash
-sudo cp deploy/systemd/deenify-billing-test.timer /etc/systemd/system/
-sudo systemctl disable --now deenify-billing.timer
-sudo systemctl daemon-reload
-sudo systemctl enable --now deenify-billing-test.timer
-sudo systemctl list-timers deenify-billing-test.timer
+sudo systemctl restart deenify-web deenify-bot
 ```
 
-Таймер `deenify-billing-test.timer` запускает уже существующий `deenify-billing.service`
-(отдельный `deenify-billing-test.service` не нужен). Если `deenify-billing.service` ещё не
-установлен:
-
-```bash
-sudo cp deploy/systemd/deenify-billing.service /etc/systemd/system/
-sudo systemctl daemon-reload
-```
-
-Купить **новую** месячную подписку (старая с `expires_at` через месяц не подойдёт). Через ~15 минут
-`charge_due_subscriptions` спишет карту и продлит период ещё на 15 минут.
-
-Проверка без списания:
-
-```bash
-python manage.py charge_due_subscriptions --dry-run
-```
-
-**Вернуть прод** (после теста):
-
-```bash
-cd /var/www/deenify
-git pull
-bash deploy/scripts/revert-billing-production.sh
-```
-
-Или вручную: убрать `DEENIFY_TEST_MONTHLY_RENEWAL_MINUTES` из `.env` (или `=0`),
-`sudo systemctl disable --now deenify-billing-test.timer`,
-`sudo systemctl enable --now deenify-billing.timer`, `sudo systemctl restart deenify-web`.
-
-Следующее автопродление добавит **30 дней** (месяц) или **365 дней** (год) к текущему `expires_at`.
-
-Проверка вручную (без списания — только список должников):
-
-```bash
-cd /var/www/deenify
-sudo -u deenify .venv/bin/python manage.py charge_due_subscriptions --dry-run
-```
+Купить месячную подписку — она сразу活 будет действовать 15 минут вместо 30 дней.
+Чтобы вернуть прод, уберите переменную из `.env` (или поставьте `=0`) и
+перезапустите `sudo systemctl restart deenify-web`.
 
 Связанные переменные `.env` (необязательные, есть значения по умолчанию):
 
 ```env
-ATMOS_TOKEN_PAYMENT_OTP=111111          # OTP для apply при списании по токену (подтвердить у Atmos для прода)
-ATMOS_RENEW_LEAD_DAYS=1                  # за сколько дней до конца продлевать
-ATMOS_RENEW_FAIL_GRACE_DAYS=3           # сколько дней пытаться, прежде чем выключить авто-продление
-ATMOS_REFERRAL_BONUS_DAYS_MONTHLY=10    # бонус пригласившему за месячную подписку приглашённого
-ATMOS_REFERRAL_BONUS_DAYS_YEARLY=30     # бонус за годовую
+CLICK_REFERRAL_BONUS_DAYS_MONTHLY=10    # бонус пригласившему за месячную подписку приглашённого
+CLICK_REFERRAL_BONUS_DAYS_YEARLY=30     # бонус за годовую
 BOT_USERNAME=DeenifyUzBot               # для реферальных ссылок t.me/<username>?start=ref_<id>
 ```
-
-> Если Atmos подтвердит, что списывает сам (push-модель), таймер можно не включать —
-> код первичной оплаты при привязке карты от этого не зависит.
 
 ---
 
 ## 9. Nginx
+## 9. Nginx
 
 ```bash
 sudo cp deploy/nginx/deenify.conf /etc/nginx/sites-available/deenify
-sudo cp deploy/nginx/atmos-checkout-proxy.conf /etc/nginx/snippets/atmos-checkout-proxy.conf
 sudo ln -sf /etc/nginx/sites-available/deenify /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### Atmos payments (merchant/pay + callback)
+### Click payments (своя страница оплаты + callback)
 
-Integration flow per [docs.atmos.uz](https://docs.atmos.uz/en/index.html):
+Схема по [docs.click.uz](https://docs.click.uz/):
 
-1. `POST https://apigw.atmos.uz/merchant/pay/create` — create transaction
-2. User pays on `http://test-checkout.pays.uz/invoice/get?...` (sandbox) or `https://checkout.pays.uz/...` (production)
-3. Atmos calls your **callback** before confirming payment
-4. After payment, user is redirected to **return** URL; backend polls `merchant/pay/get` and activates subscription
+1. Кнопка тарифа в боте ведёт на **нашу** страницу
+   `GET /api/v1/payments/click/start/?telegram_id=…&plan_id=…&exp=…&sig=…`
+2. Бэкенд создаёт заказ и рендерит свою HTML-страницу со скрытой формой
+3. Форма `POST`-ится на `https://my.click.uz/services/pay` — это страница оплаты Click
+4. Click вызывает наш **callback**: `action=0` (Prepare) и `action=1` (Complete)
+5. После оплаты Click возвращает пользователя на **return URL** — тоже нашу страницу
 
-Register in **partner-test.atmos.uz** (then Atmos will issue `ATMOS_API_KEY`):
+Зарегистрировать в кабинете [my.click.uz](https://my.click.uz) (Мерчант → Настройки):
 
 | Setting | Value |
 |---------|--------|
-| Callback URL | `https://api.frienfinity.uz/api/v1/payments/atmos/callback/` |
-| Return URL (redirectLink) | `https://api.frienfinity.uz/api/v1/payments/atmos/return/` |
+| Callback URL | `https://api.frienfinity.uz/api/v1/payments/click/callback/` |
+| Return URL | `https://api.frienfinity.uz/api/v1/payments/click/return/` |
 
 `.env` example:
 
 ```env
-ATMOS_TEST_MODE=True
-ATMOS_BASE_URL=https://apigw.atmos.uz
-ATMOS_CALLBACK_URL=https://api.frienfinity.uz/api/v1/payments/atmos/callback/
-ATMOS_RETURN_URL=https://api.frienfinity.uz/api/v1/payments/atmos/return/
-ATMOS_SUCCESS_REDIRECT_URL=https://t.me/DeenifyUzBot
-ATMOS_API_KEY=   # from Atmos after callback URL is registered
+CLICK_SERVICE_ID=        # Service ID из кабинета
+CLICK_MERCHANT_ID=       # Merchant ID из кабинета
+CLICK_MERCHANT_USER_ID=  # Merchant user ID из кабинета
+CLICK_SECRET_KEY=        # Secret key для проверки подписи callback
+CLICK_PAYMENT_URL=https://my.click.uz/services/pay
+CLICK_RETURN_URL=https://api.frienfinity.uz/api/v1/payments/click/return/
+CLICK_CALLBACK_URL=https://api.frienfinity.uz/api/v1/payments/click/callback/
+CLICK_BOT_URL=https://t.me/DeenifyUzBot
+CLICK_LANG=uz
 ```
+
+Подпись callback (MD5) проверяется всегда:
+`click_trans_id + service_id + secret_key + merchant_trans_id + [merchant_prepare_id] + amount + action + sign_time`.
 
 ---
 
@@ -349,7 +310,6 @@ sudo bash deploy/scripts/fix-nginx-ssl.sh
 
 ```bash
 sudo cp deploy/nginx/deenify.conf /etc/nginx/sites-available/deenify
-sudo cp deploy/nginx/atmos-checkout-proxy.conf /etc/nginx/snippets/
 sudo ln -sf /etc/nginx/sites-available/deenify /etc/nginx/sites-enabled/deenify
 sudo nginx -t && sudo systemctl reload nginx
 ```
@@ -368,9 +328,9 @@ echo | openssl s_client -connect api.frienfinity.uz:443 -servername api.frienfin
 # Бот — всегда localhost (на том же сервере):
 BACKEND_BASE_URL=http://127.0.0.1:8001/api/v1
 
-ATMOS_CALLBACK_URL=https://api.frienfinity.uz/api/v1/payments/atmos/callback/
-ATMOS_RETURN_URL=https://api.frienfinity.uz/api/v1/payments/atmos/return/
-ATMOS_SUCCESS_REDIRECT_URL=https://t.me/DeenifyUzBot
+CLICK_CALLBACK_URL=https://api.frienfinity.uz/api/v1/payments/click/callback/
+CLICK_RETURN_URL=https://api.frienfinity.uz/api/v1/payments/click/return/
+CLICK_BOT_URL=https://t.me/DeenifyUzBot
 ```
 
 ```bash
@@ -397,6 +357,15 @@ sudo ufw enable
 | https://api.frienfinity.uz/admin/ | Админка |
 | https://api.frienfinity.uz/api/docs/ | Swagger |
 | Telegram | Бот отвечает на /start |
+
+Локальные тесты (в проекте есть Django-приложение `tests`, поэтому discovery с
+пустым ярлыком падает на совпадении имён пакетов — указываем ярлыки явно):
+
+```bash
+cd /var/www/deenify
+.venv/bin/python manage.py check
+.venv/bin/python manage.py test users.tests tests
+```
 
 ---
 

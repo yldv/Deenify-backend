@@ -3,9 +3,8 @@ from django.utils import timezone
 
 from .models import (
     ActiveTelegramUser,
-    AtmosOrder,
-    AtmosTransaction,
-    BoundCard,
+    ClickOrder,
+    ClickTransaction,
     Feedback,
     SubscriptionPlan,
     TelegramUser,
@@ -131,16 +130,15 @@ class UserPremiumSubscriptionAdmin(admin.ModelAdmin):
         "user",
         "plan",
         "source",
-        "auto_renew",
         "starts_at",
         "expires_at",
         "is_active",
         "is_current",
     )
-    list_filter = ("is_active", "auto_renew", "source", "plan", "starts_at", "expires_at")
+    list_filter = ("is_active", "source", "plan", "starts_at", "expires_at")
     search_fields = ("user__telegram_id", "user__username", "plan__name")
     readonly_fields = ("created_at", "updated_at")
-    autocomplete_fields = ("user", "plan", "source_order", "bound_card")
+    autocomplete_fields = ("user", "plan", "source_order")
     ordering = ("-starts_at",)
 
     def get_queryset(self, request):
@@ -149,28 +147,6 @@ class UserPremiumSubscriptionAdmin(admin.ModelAdmin):
     @admin.display(boolean=True, description="Joriy")
     def is_current(self, obj):
         return obj.is_current
-
-
-@admin.register(BoundCard)
-class BoundCardAdmin(admin.ModelAdmin):
-    list_display = ("user", "masked_pan", "card_id", "expiry", "created_at")
-    list_filter = ("created_at",)
-    search_fields = ("user__telegram_id", "user__username", "card_id", "masked_pan")
-    readonly_fields = ("created_at", "updated_at", "card_token")
-    autocomplete_fields = ("user",)
-    ordering = ("-created_at",)
-    actions = ("delete_inactive_cards",)
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).filter(is_active=True)
-
-    @admin.action(description="Barcha uzilgan (faol emas) kartalarni o'chirish")
-    def delete_inactive_cards(self, request, queryset):
-        count, _ = BoundCard.objects.filter(is_active=False).delete()
-        if not count:
-            self.message_user(request, "Uzilgan kartalar yo'q.", level="warning")
-            return
-        self.message_user(request, f"{count} ta uzilgan karta o'chirildi.")
 
 
 @admin.register(Feedback)
@@ -187,8 +163,8 @@ class FeedbackAdmin(admin.ModelAdmin):
         return (obj.text[:60] + "…") if len(obj.text or "") > 60 else (obj.text or "")
 
 
-class AtmosTransactionInline(admin.TabularInline):
-    model = AtmosTransaction
+class ClickTransactionInline(admin.TabularInline):
+    model = ClickTransaction
     extra = 0
     readonly_fields = (
         "transaction_id",
@@ -202,8 +178,8 @@ class AtmosTransactionInline(admin.TabularInline):
 
 
 @admin.action(description="Tanlangan to'lanmagan buyurtmalarni o'chirish")
-def delete_unpaid_atmos_orders(modeladmin, request, queryset):
-    unpaid = queryset.exclude(status=AtmosOrder.Status.PAID)
+def delete_unpaid_click_orders(modeladmin, request, queryset):
+    unpaid = queryset.exclude(status=ClickOrder.Status.PAID)
     count = unpaid.count()
     if not count:
         modeladmin.message_user(
@@ -214,8 +190,8 @@ def delete_unpaid_atmos_orders(modeladmin, request, queryset):
     modeladmin.message_user(request, f"{count} ta to'lanmagan buyurtma o'chirildi.")
 
 
-@admin.register(AtmosOrder)
-class AtmosOrderAdmin(admin.ModelAdmin):
+@admin.register(ClickOrder)
+class ClickOrderAdmin(admin.ModelAdmin):
     list_display = (
         "merchant_order_id",
         "order_id",
@@ -224,14 +200,14 @@ class AtmosOrderAdmin(admin.ModelAdmin):
         "amount",
         "currency",
         "status",
-        "is_auto_renewal",
+        "click_trans_id",
         "paid_at",
     )
-    list_filter = ("status", "is_auto_renewal", "currency", "created_at", "paid_at")
+    list_filter = ("status", "currency", "created_at", "paid_at")
     search_fields = (
         "order_id",
         "merchant_order_id",
-        "atmos_transaction_id",
+        "click_trans_id",
         "user__telegram_id",
         "user__username",
     )
@@ -239,17 +215,17 @@ class AtmosOrderAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
         "paid_at",
-        "payment_url",
+        "checkout_url",
         "request_payload",
         "response_payload",
     )
-    autocomplete_fields = ("user", "plan", "bound_card")
-    inlines = (AtmosTransactionInline,)
-    actions = (delete_unpaid_atmos_orders,)
+    autocomplete_fields = ("user", "plan")
+    inlines = (ClickTransactionInline,)
+    actions = (delete_unpaid_click_orders,)
 
 
-@admin.register(AtmosTransaction)
-class AtmosTransactionAdmin(admin.ModelAdmin):
+@admin.register(ClickTransaction)
+class ClickTransactionAdmin(admin.ModelAdmin):
     list_display = (
         "transaction_id",
         "order",

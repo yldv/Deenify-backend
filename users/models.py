@@ -142,40 +142,6 @@ class ActiveTelegramUser(TelegramUser):
         verbose_name_plural = _("Active Telegram users")
 
 
-class BoundCard(TimeStampedModel):
-    """Atmos card token saved only after a successful first charge (apply)."""
-
-    user = models.ForeignKey(
-        TelegramUser,
-        on_delete=models.CASCADE,
-        related_name="bound_cards",
-        verbose_name=_("user"),
-    )
-    card_id = models.CharField(_("Atmos card id"), max_length=64, db_index=True)
-    card_token = models.CharField(_("card token"), max_length=255)
-    masked_pan = models.CharField(_("masked pan"), max_length=32, blank=True)
-    expiry = models.CharField(_("expiry"), max_length=8, blank=True)
-    card_holder = models.CharField(_("card holder"), max_length=255, blank=True)
-    phone = models.CharField(_("phone"), max_length=32, blank=True)
-    is_active = models.BooleanField(_("is active"), default=True, db_index=True)
-    removed_at = models.DateTimeField(_("removed at"), null=True, blank=True)
-
-    class Meta:
-        ordering = ("-created_at",)
-        verbose_name = _("Bound card")
-        verbose_name_plural = _("Bound cards")
-        indexes = [
-            models.Index(fields=("user", "is_active")),
-        ]
-
-    def __str__(self):
-        return f"{self.masked_pan or self.card_id} ({self.user})"
-
-    def mark_removed(self):
-        """Remove card record (only active cards are kept in the database)."""
-        self.delete()
-
-
 class SubscriptionPlan(TimeStampedModel):
     class BillingPeriod(models.TextChoices):
         DAY = "day", _("Day")
@@ -244,19 +210,6 @@ class UserPremiumSubscription(TimeStampedModel):
     starts_at = models.DateTimeField(_("starts at"), default=timezone.now)
     expires_at = models.DateTimeField(_("expires at"), null=True, blank=True)
     is_active = models.BooleanField(_("is active"), default=True)
-    auto_renew = models.BooleanField(
-        _("auto renew"),
-        default=False,
-        help_text=_("Charge the bound card automatically when this period ends."),
-    )
-    bound_card = models.ForeignKey(
-        "BoundCard",
-        on_delete=models.SET_NULL,
-        related_name="subscriptions",
-        null=True,
-        blank=True,
-        verbose_name=_("bound card"),
-    )
     source = models.CharField(
         _("source"),
         max_length=20,
@@ -264,7 +217,7 @@ class UserPremiumSubscription(TimeStampedModel):
         default=Source.PAYMENT,
     )
     source_order = models.OneToOneField(
-        "AtmosOrder",
+        "ClickOrder",
         on_delete=models.SET_NULL,
         related_name="premium_subscription",
         null=True,
@@ -304,12 +257,13 @@ class UserPremiumSubscription(TimeStampedModel):
         """Turn off stale rows after a renewal or new purchase extends coverage."""
         cls.objects.filter(user=user).exclude(pk=keep_pk).update(
             is_active=False,
-            auto_renew=False,
             updated_at=timezone.now(),
         )
 
 
-class AtmosOrder(TimeStampedModel):
+class ClickOrder(TimeStampedModel):
+    """One Click payment attempt for a subscription plan."""
+
     class Status(models.TextChoices):
         CREATED = "created", _("Created")
         PENDING = "pending", _("Pending")
@@ -321,13 +275,13 @@ class AtmosOrder(TimeStampedModel):
     user = models.ForeignKey(
         TelegramUser,
         on_delete=models.PROTECT,
-        related_name="atmos_orders",
+        related_name="click_orders",
         verbose_name=_("user"),
     )
     plan = models.ForeignKey(
         SubscriptionPlan,
         on_delete=models.PROTECT,
-        related_name="atmos_orders",
+        related_name="click_orders",
         verbose_name=_("plan"),
     )
     order_id = models.CharField(_("order id"), max_length=64, unique=True)
@@ -338,11 +292,12 @@ class AtmosOrder(TimeStampedModel):
         blank=True,
         null=True,
     )
-    atmos_transaction_id = models.CharField(
-        _("Atmos transaction id"),
+    click_trans_id = models.CharField(
+        _("Click transaction id"),
         max_length=128,
         blank=True,
         db_index=True,
+        help_text=_("click_trans_id returned by Click in the callback."),
     )
     amount = models.DecimalField(_("amount"), max_digits=12, decimal_places=2)
     currency = models.CharField(_("currency"), max_length=3, default="UZS")
@@ -354,29 +309,20 @@ class AtmosOrder(TimeStampedModel):
         db_index=True,
     )
     paid_at = models.DateTimeField(_("paid at"), null=True, blank=True)
-    expires_at = models.DateTimeField(_("expires at"), null=True, blank=True)
     success_notified = models.BooleanField(_("success notified"), default=False)
-    is_auto_renewal = models.BooleanField(
-        _("is auto renewal"),
-        default=False,
-        help_text=_("Charge created automatically by the recurring billing scheduler."),
-    )
-    bound_card = models.ForeignKey(
-        "BoundCard",
-        on_delete=models.SET_NULL,
-        related_name="orders",
-        null=True,
+    checkout_url = models.URLField(
+        _("checkout url"),
+        max_length=500,
         blank=True,
-        verbose_name=_("bound card"),
+        help_text=_("Our own checkout page that renders the Click payment form."),
     )
-    payment_url = models.URLField(_("payment url"), max_length=500, blank=True)
     request_payload = models.JSONField(_("request payload"), default=dict, blank=True)
     response_payload = models.JSONField(_("response payload"), default=dict, blank=True)
 
     class Meta:
         ordering = ("-created_at",)
-        verbose_name = _("Atmos order")
-        verbose_name_plural = _("Atmos orders")
+        verbose_name = _("Click order")
+        verbose_name_plural = _("Click orders")
         indexes = [
             models.Index(fields=("user", "status")),
             models.Index(fields=("order_id", "status")),
@@ -396,7 +342,7 @@ class AtmosOrder(TimeStampedModel):
     def is_paid(self):
         return self.status == self.Status.PAID
 
-    def mark_as_paid(self, atmos_transaction_id="", payload=None):
+    def mark_as_paid(self, click_trans_id="", payload=None):
         with transaction.atomic():
             now = timezone.now()
             order = type(self).objects.select_for_update().get(pk=self.pk)
@@ -405,15 +351,15 @@ class AtmosOrder(TimeStampedModel):
 
             order.status = order.Status.PAID
             order.paid_at = now
-            if atmos_transaction_id:
-                order.atmos_transaction_id = atmos_transaction_id
+            if click_trans_id:
+                order.click_trans_id = click_trans_id
             if payload:
                 order.response_payload = payload
             order.save(
                 update_fields=(
                     "status",
                     "paid_at",
-                    "atmos_transaction_id",
+                    "click_trans_id",
                     "response_payload",
                     "updated_at",
                 )
@@ -435,9 +381,6 @@ class AtmosOrder(TimeStampedModel):
                     subscription.expires_at = subscription.expires_at + duration_delta
                 if order.plan_id:
                     subscription.plan = order.plan
-                if order.bound_card_id:
-                    subscription.bound_card = order.bound_card
-                    subscription.auto_renew = True
                 subscription.source = UserPremiumSubscription.Source.PAYMENT
                 subscription.source_order = order
                 subscription.is_active = True
@@ -445,8 +388,6 @@ class AtmosOrder(TimeStampedModel):
                     update_fields=(
                         "expires_at",
                         "plan",
-                        "bound_card",
-                        "auto_renew",
                         "source",
                         "source_order",
                         "is_active",
@@ -459,8 +400,8 @@ class AtmosOrder(TimeStampedModel):
                 return subscription
 
             # Extend the user's CURRENT active subscription in place so repeated
-            # purchases (and renewals) accumulate onto one row instead of creating
-            # separate, future-dated periods that the status view would ignore.
+            # purchases accumulate onto one row instead of creating separate,
+            # future-dated periods that the status view would ignore.
             active_subscription = (
                 UserPremiumSubscription.objects.select_for_update()
                 .filter(user=order.user, is_active=True, starts_at__lte=now)
@@ -471,21 +412,7 @@ class AtmosOrder(TimeStampedModel):
             if active_subscription:
                 return _apply_payment_extension(active_subscription)
 
-            # Late auto-renewal: extend the expired period row instead of duplicating.
-            if order.is_auto_renewal:
-                renewal_target = (
-                    UserPremiumSubscription.objects.select_for_update()
-                    .filter(user=order.user, is_active=True, expires_at__lte=now)
-                    .order_by("-expires_at")
-                    .first()
-                )
-                if renewal_target:
-                    return _apply_payment_extension(renewal_target)
-
             # No active coverage: start a fresh period from now.
-            UserPremiumSubscription.objects.filter(
-                user=order.user, is_active=True, auto_renew=True
-            ).update(auto_renew=False)
             starts_at = now
             expires_at = None if duration_delta is None else starts_at + duration_delta
             subscription = UserPremiumSubscription.objects.create(
@@ -494,8 +421,6 @@ class AtmosOrder(TimeStampedModel):
                 starts_at=starts_at,
                 expires_at=expires_at,
                 is_active=True,
-                auto_renew=bool(order.bound_card_id),
-                bound_card=order.bound_card,
                 source=UserPremiumSubscription.Source.PAYMENT,
                 source_order=order,
             )
@@ -514,7 +439,7 @@ class AtmosOrder(TimeStampedModel):
         )
 
 
-class AtmosTransaction(TimeStampedModel):
+class ClickTransaction(TimeStampedModel):
     class Status(models.TextChoices):
         INITIATED = "initiated", _("Initiated")
         SUCCESS = "success", _("Success")
@@ -523,7 +448,7 @@ class AtmosTransaction(TimeStampedModel):
         REVERSED = "reversed", _("Reversed")
 
     order = models.ForeignKey(
-        AtmosOrder,
+        ClickOrder,
         on_delete=models.CASCADE,
         related_name="transactions",
         verbose_name=_("order"),
@@ -543,12 +468,12 @@ class AtmosTransaction(TimeStampedModel):
 
     class Meta:
         ordering = ("-created_at",)
-        verbose_name = _("Atmos transaction")
-        verbose_name_plural = _("Atmos transactions")
+        verbose_name = _("Click transaction")
+        verbose_name_plural = _("Click transactions")
         constraints = [
             models.UniqueConstraint(
                 fields=("order", "transaction_id"),
-                name="unique_atmos_transaction_per_order",
+                name="unique_click_transaction_per_order",
             ),
         ]
         indexes = [
@@ -567,7 +492,7 @@ class AtmosTransaction(TimeStampedModel):
             update_fields=("status", "performed_at", "provider_payload", "updated_at")
         )
         return self.order.mark_as_paid(
-            atmos_transaction_id=self.transaction_id,
+            click_trans_id=self.transaction_id,
             payload=payload or self.provider_payload,
         )
 
@@ -616,12 +541,12 @@ class Feedback(TimeStampedModel):
         return f"{self.user} - {self.get_context_display()} - {self.reason or 'text'}"
 
 
-def get_atmos_config():
+def get_click_config():
     return {
-        "store_id": settings.ATMOS_STORE_ID,
-        "consumer_key": settings.ATMOS_CONSUMER_KEY,
-        "consumer_secret": settings.ATMOS_CONSUMER_SECRET,
-        "callback_url": settings.ATMOS_CALLBACK_URL,
-        "return_url": settings.ATMOS_RETURN_URL,
-        "base_url": settings.ATMOS_BASE_URL,
+        "service_id": settings.CLICK_SERVICE_ID,
+        "merchant_id": settings.CLICK_MERCHANT_ID,
+        "merchant_user_id": settings.CLICK_MERCHANT_USER_ID,
+        "secret_key": settings.CLICK_SECRET_KEY,
+        "payment_url": settings.CLICK_PAYMENT_URL,
+        "return_url": settings.CLICK_RETURN_URL,
     }

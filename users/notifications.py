@@ -147,8 +147,8 @@ def _format_until(*, subscription, language: str) -> str:
 def notify_payment_success(order) -> None:
     """Delete the catalog message and confirm the payment in the user's chat.
 
-    Idempotent: guarded by ``AtmosOrder.success_notified`` so callback + apply +
-    return polling can all call it without sending duplicates.
+    Idempotent: guarded by ``ClickOrder.success_notified`` so the callback can be
+    retried by Click without sending duplicates.
     """
     try:
         with transaction.atomic():

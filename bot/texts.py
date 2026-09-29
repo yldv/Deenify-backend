@@ -169,11 +169,7 @@ TEXTS = {
             "Sizga <b>{days}</b> kun bonus premium qo'shildi. Rahmat! 🙌"
         ),
         "cancel_no_subscription": "ℹ️ Sizda faol obuna yo'q.",
-        "cancel_done": (
-            "✅ Avto-uzaytirish o'chirildi va karta uzildi.\n"
-            "Premium <b>{until}</b> gacha amal qiladi."
-        ),
-        "cancel_done_no_premium": "✅ Avto-uzaytirish o'chirildi va karta uzildi.",
+        "cancel_done": "✅ Obuna bekor qilindi. Premium faolligi tugatildi.",
         "feedback_decline_button": "❌ Premium kerak emas",
         "feedback_intro": "Bizga yordam bering: nega obuna bo'lmadingiz?",
         "feedback_reason_expensive": "💰 Narxi qimmat", 
@@ -184,10 +180,6 @@ TEXTS = {
         "feedback_skip": "O'tkazib yuborish",
         "feedback_other_prompt": "Iltimos, sababingizni yozib qoldiring:",
         "feedback_thanks": "🙏 Fikringiz uchun rahmat!",
-        "subscription_renewal_failed": (
-            "⚠️ Obunani avtomatik uzaytirib bo'lmadi (kartadan to'lov o'tmadi).\n"
-            "Premiumni davom ettirish uchun qaytadan obuna bo'ling."
-        ),
         "quiz_restart_hint": "✨ Test qayta boshlandi. Barcha savollar boshidan, tasodifiy tartibda.",
         "quiz_session_expired": (
             "⏳ Bu savol muddati tugadi (bot qayta ishga tushgan bo'lishi mumkin).\n"
@@ -340,11 +332,7 @@ TEXTS = {
             "Сизга <b>{days}</b> кун бонус премиум қўшилди. Раҳмат! 🙌"
         ),
         "cancel_no_subscription": "ℹ️ Сизда фаол обуна йўқ.",
-        "cancel_done": (
-            "✅ Авто-узайтириш ўчирилди ва карта узилди.\n"
-            "Премиум <b>{until}</b> гача амал қилади."
-        ),
-        "cancel_done_no_premium": "✅ Авто-узайтириш ўчирилди ва карта узилди.",
+        "cancel_done": "✅ Обуна бекор қилинди. Премиум фаоллиги тугатилди.",
         "feedback_decline_button": "❌ Премиум керак эмас",
         "feedback_intro": "Бизга ёрдам беринг: нега обуна бўлмадингиз?",
         "feedback_reason_expensive": "💰 Нархи қиммат",
@@ -355,10 +343,6 @@ TEXTS = {
         "feedback_skip": "Ўтказиб юбориш",
         "feedback_other_prompt": "Илтимос, сабабингизни ёзиб қолдиринг:",
         "feedback_thanks": "🙏 Фикрингиз учун раҳмат!",
-        "subscription_renewal_failed": (
-            "⚠️ Обунани автоматик узайтириб бўлмади (картадан тўлов ўтмади).\n"
-            "Премиумни давом эттириш учун қайтадан обуна бўлинг."
-        ),
         "quiz_restart_hint": "✨ Тест қайта бошланди. Барча саволлар бошидан, тасодифий тартибда.",
         "quiz_session_expired": (
             "⏳ Бу savolning muddati tugadi (bot qayta ishga tushgan bo'lishi mumkin).\n"
@@ -512,11 +496,7 @@ TEXTS = {
             "Вам добавлено <b>{days}</b> дн. бонусного премиума. Спасибо! 🙌"
         ),
         "cancel_no_subscription": "ℹ️ У вас нет активной подписки.",
-        "cancel_done": (
-            "✅ Автопродление отключено, карта отвязана.\n"
-            "Премиум действует до <b>{until}</b>."
-        ),
-        "cancel_done_no_premium": "✅ Автопродление отключено, карта отвязана.",
+        "cancel_done": "✅ Подписка отменена. Премиум отключён.",
         "feedback_decline_button": "❌ Премиум не нужен",
         "feedback_intro": "Помогите нам: почему вы не оформили подписку?",
         "feedback_reason_expensive": "💰 Дорого",
@@ -527,10 +507,6 @@ TEXTS = {
         "feedback_skip": "Пропустить",
         "feedback_other_prompt": "Пожалуйста, напишите вашу причину:",
         "feedback_thanks": "🙏 Спасибо за ваш отзыв!",
-        "subscription_renewal_failed": (
-            "⚠️ Не удалось автоматически продлить подписку (оплата картой не прошла).\n"
-            "Чтобы продолжить премиум, оформите подписку заново."
-        ),
         "quiz_restart_hint": "✨ Тест начат заново. Все вопросы с начала, в случайном порядке.",
         "blocked": "Аккаунт заблокирован.",
         "not_found": "Данные не найдены. Нажмите /start.",

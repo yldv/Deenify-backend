@@ -1,4 +1,4 @@
-"""Delete unpaid Atmos orders older than the retention window.
+"""Delete unpaid Click orders older than the retention window.
 
 Paid orders are kept forever. Transactions are removed via CASCADE.
 Run daily via systemd timer, or once before prod with --all-unpaid.
@@ -7,11 +7,11 @@ Run daily via systemd timer, or once before prod with --all-unpaid.
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from users.services import cleanup_stale_atmos_orders
+from users.services import cleanup_stale_click_orders
 
 
 class Command(BaseCommand):
-    help = "Remove stale unpaid Atmos orders and their transactions."
+    help = "Remove stale unpaid Click orders and their transactions."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -20,7 +20,7 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Delete unpaid orders older than N days "
-                f"(default: {getattr(settings, 'ATMOS_STALE_ORDER_RETENTION_DAYS', 1)})."
+                f"(default: {getattr(settings, 'CLICK_STALE_ORDER_RETENTION_DAYS', 1)})."
             ),
         )
         parser.add_argument(
@@ -35,7 +35,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        result = cleanup_stale_atmos_orders(
+        result = cleanup_stale_click_orders(
             days=options["days"],
             all_unpaid=options["all_unpaid"],
             dry_run=options["dry_run"],

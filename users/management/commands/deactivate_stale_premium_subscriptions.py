@@ -28,9 +28,5 @@ class Command(BaseCommand):
                 )
             return
 
-        updated = stale.update(
-            is_active=False,
-            auto_renew=False,
-            updated_at=now,
-        )
+        updated = stale.update(is_active=False, updated_at=now)
         self.stdout.write(self.style.SUCCESS(f"Deactivated {updated} stale subscription(s)."))

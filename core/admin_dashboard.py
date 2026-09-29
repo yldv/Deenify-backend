@@ -6,7 +6,7 @@ from django.db.models.functions import TruncDate
 from django.utils import timezone
 
 from tests.models import Test, UserAnsweredTest
-from users.models import AtmosOrder, TelegramUser
+from users.models import ClickOrder, TelegramUser
 from users.services import get_admin_statistics
 
 
@@ -38,18 +38,18 @@ def _series_for_days(queryset, date_field: str, days: int = 7) -> list[int]:
 def get_chart_data() -> dict:
     labels = _last_n_days_labels()
     order_status = {
-        AtmosOrder.Status.PAID: "To'langan",
-        AtmosOrder.Status.PENDING: "Kutilmoqda",
-        AtmosOrder.Status.CREATED: "Yaratilgan",
-        AtmosOrder.Status.FAILED: "Xato",
-        AtmosOrder.Status.CANCELED: "Bekor",
-        AtmosOrder.Status.EXPIRED: "Muddati o'tgan",
+        ClickOrder.Status.PAID: "To'langan",
+        ClickOrder.Status.PENDING: "Kutilmoqda",
+        ClickOrder.Status.CREATED: "Yaratilgan",
+        ClickOrder.Status.FAILED: "Xato",
+        ClickOrder.Status.CANCELED: "Bekor",
+        ClickOrder.Status.EXPIRED: "Muddati o'tgan",
     }
     order_counts = []
     order_labels = []
     for code, label in order_status.items():
-        count = AtmosOrder.objects.filter(status=code).count()
-        if count or code in (AtmosOrder.Status.PAID, AtmosOrder.Status.PENDING):
+        count = ClickOrder.objects.filter(status=code).count()
+        if count or code in (ClickOrder.Status.PAID, ClickOrder.Status.PENDING):
             order_labels.append(label)
             order_counts.append(count)
 

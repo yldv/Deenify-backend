@@ -222,107 +222,44 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN', '').strip()
 BOT_USERNAME = os.environ.get('BOT_USERNAME', 'DeenifyUzBot').strip().lstrip('@')
 BACKEND_PUBLIC_URL = os.environ.get('BACKEND_PUBLIC_URL', '').strip().rstrip('/')
 
-ATMOS_STORE_ID = os.environ.get('ATMOS_STORE_ID', '').strip()
-ATMOS_TERMINAL_ID = os.environ.get('ATMOS_TERMINAL_ID', '').strip()
-ATMOS_CONSUMER_KEY = os.environ.get('ATMOS_CONSUMER_KEY', '').strip()
-ATMOS_CONSUMER_SECRET = os.environ.get('ATMOS_CONSUMER_SECRET', '').strip()
-ATMOS_API_KEY = os.environ.get('ATMOS_API_KEY', '').strip()
-ATMOS_CALLBACK_URL = os.environ.get('ATMOS_CALLBACK_URL', '').strip()
-ATMOS_RETURN_URL = os.environ.get('ATMOS_RETURN_URL', '').strip()
-ATMOS_SUCCESS_REDIRECT_URL = os.environ.get(
-    'ATMOS_SUCCESS_REDIRECT_URL', 'https://t.me/DeenifyUzBot'
-).strip()
-# API gateway (NOT partner.atmos.uz — that is only the merchant portal).
-_base_url_override = os.environ.get('ATMOS_BASE_URL', '').strip()
-ATMOS_BASE_URL = (_base_url_override or 'https://apigw.atmos.uz').rstrip('/')
-ATMOS_TEST_MODE = os.environ.get('ATMOS_TEST_MODE', 'False') == 'True'
-# Payment page after POST /merchant/pay/create (docs.atmos.uz — Payment page).
-_checkout_page_override = os.environ.get('ATMOS_CHECKOUT_PAGE_BASE', '').strip().rstrip('/')
-if _checkout_page_override:
-    ATMOS_CHECKOUT_PAGE_BASE = _checkout_page_override
-elif ATMOS_TEST_MODE:
-    # Direct test-checkout is HTTP and often unreachable outside UZ; use HTTPS proxy when set.
-    _proxy_for_checkout = (
-        os.environ.get('ATMOS_CHECKOUT_PROXY_BASE', '').strip().rstrip('/')
-        or (
-            ATMOS_CALLBACK_URL.split('/api/', 1)[0].rstrip('/')
-            if ATMOS_CALLBACK_URL and '/api/' in ATMOS_CALLBACK_URL
-            else ''
-        )
-    )
-    ATMOS_CHECKOUT_PAGE_BASE = _proxy_for_checkout or 'https://test-checkout.pays.uz'
-else:
-    ATMOS_CHECKOUT_PAGE_BASE = 'https://checkout.pays.uz'
-# merchant = POST /merchant/pay/create + pays.uz page; invoice = /checkout/invoice/create (sandbox fallback).
-ATMOS_PAYMENT_FLOW = os.environ.get('ATMOS_PAYMENT_FLOW', '').strip().lower()
-if not ATMOS_PAYMENT_FLOW:
-    ATMOS_PAYMENT_FLOW = 'merchant'
-# Legacy: nginx proxy for old dev-checkout.atmos.uz flow (no longer used by default).
-_checkout_proxy_override = os.environ.get('ATMOS_CHECKOUT_PROXY_BASE', '').strip().rstrip('/')
-if _checkout_proxy_override:
-    ATMOS_CHECKOUT_PROXY_BASE = _checkout_proxy_override
-elif ATMOS_CALLBACK_URL and '/api/' in ATMOS_CALLBACK_URL:
-    ATMOS_CHECKOUT_PROXY_BASE = ATMOS_CALLBACK_URL.split('/api/', 1)[0].rstrip('/')
-else:
-    ATMOS_CHECKOUT_PROXY_BASE = ''
-ATMOS_SIGN_ALGORITHM = os.environ.get('ATMOS_SIGN_ALGORITHM', 'md5')
-ATMOS_CALLBACK_SUCCESS_MESSAGE = os.environ.get(
-    'ATMOS_CALLBACK_SUCCESS_MESSAGE', 'Успешно'
-).strip() or 'Успешно'
-# Sandbox treats this as seconds (~60s with value 60). Default: 1 hour.
-ATMOS_INVOICE_EXPIRATION_SECONDS = int(
-    os.environ.get('ATMOS_INVOICE_EXPIRATION_SECONDS', '3600')
-)
-# OTP used by merchant/pay/apply when charging a previously bound card (card_token):
-# Atmos does not send an SMS for token charges. Sandbox accepts 111111.
-# CONFIRM the production value with Atmos before going live.
-ATMOS_TOKEN_PAYMENT_OTP = os.environ.get('ATMOS_TOKEN_PAYMENT_OTP', '111111').strip()
-# HTTP timeouts (seconds) when calling apigw.atmos.uz. Apply waits for billing + callback.
-ATMOS_REQUEST_TIMEOUT = int(os.environ.get('ATMOS_REQUEST_TIMEOUT', '45'))
-ATMOS_APPLY_TIMEOUT = int(os.environ.get('ATMOS_APPLY_TIMEOUT', '120'))
-# Referral bonus days granted to the inviter on the invited user's FIRST payment.
-ATMOS_REFERRAL_BONUS_DAYS_MONTHLY = int(
-    os.environ.get('ATMOS_REFERRAL_BONUS_DAYS_MONTHLY', '10')
-)
-ATMOS_REFERRAL_BONUS_DAYS_YEARLY = int(
-    os.environ.get('ATMOS_REFERRAL_BONUS_DAYS_YEARLY', '30')
-)
-# Recurring billing (charge_due_subscriptions): renew this many days before expiry,
-# and give up auto-renewal (notify the user) after this many days of failed retries.
-ATMOS_RENEW_LEAD_DAYS = int(os.environ.get('ATMOS_RENEW_LEAD_DAYS', '1'))
-ATMOS_RENEW_FAIL_GRACE_DAYS = int(os.environ.get('ATMOS_RENEW_FAIL_GRACE_DAYS', '3'))
-# Test auto-renewal: monthly plan lasts N minutes instead of 30 days (0 = production).
-# Yearly plans are unchanged. Remove or set to 0 after testing.
-DEENIFY_TEST_MONTHLY_RENEWAL_MINUTES = int(
-    os.environ.get('DEENIFY_TEST_MONTHLY_RENEWAL_MINUTES', '0')
-)
-# Used only when DEENIFY_TEST_MONTHLY_RENEWAL_MINUTES > 0 (renew when expiry is within N minutes).
-ATMOS_RENEW_LEAD_MINUTES = int(os.environ.get('ATMOS_RENEW_LEAD_MINUTES', '0'))
-ATMOS_RENEW_FAIL_GRACE_MINUTES = int(
-    os.environ.get('ATMOS_RENEW_FAIL_GRACE_MINUTES', '30')
-)
-# Unpaid Atmos orders older than this are removed by cleanup_stale_atmos_orders (daily timer).
-ATMOS_STALE_ORDER_RETENTION_DAYS = int(
-    os.environ.get('ATMOS_STALE_ORDER_RETENTION_DAYS', '1')
-)
-
-# Click.  Values are issued in the Click merchant cabinet.  The callback URL
-# must be publicly reachable and registered there:
-# https://<your-domain>/api/v1/payments/click/callback/
+# --- Click (the only payment provider) -------------------------------------
+# All values come from the Click merchant cabinet (my.click.uz -> Sozlamalar).
 CLICK_SERVICE_ID = os.environ.get('CLICK_SERVICE_ID', '').strip()
 CLICK_MERCHANT_ID = os.environ.get('CLICK_MERCHANT_ID', '').strip()
 CLICK_MERCHANT_USER_ID = os.environ.get('CLICK_MERCHANT_USER_ID', '').strip()
 CLICK_SECRET_KEY = os.environ.get('CLICK_SECRET_KEY', '').strip()
+# Click's payment page that receives our HTML form (POST or GET).
 CLICK_PAYMENT_URL = os.environ.get(
     'CLICK_PAYMENT_URL', 'https://my.click.uz/services/pay'
 ).strip().rstrip('/')
-CLICK_RETURN_URL = os.environ.get(
-    'CLICK_RETURN_URL', 'https://t.me/DeenifyUzBot'
+# Click Merchant API callback. MUST be registered in the cabinet:
+#   https://<your-domain>/api/v1/payments/click/callback/
+CLICK_CALLBACK_URL = os.environ.get('CLICK_CALLBACK_URL', '').strip()
+# Where Click sends the customer right after the payment page. It must be our own
+# page (it renders the result and links back to the bot).
+CLICK_RETURN_URL = os.environ.get('CLICK_RETURN_URL', '').strip()
+# Telegram deep link used by the checkout/return pages ("back to bot" button).
+CLICK_BOT_URL = os.environ.get(
+    'CLICK_BOT_URL', f"https://t.me/{BOT_USERNAME}" if BOT_USERNAME else 'https://t.me/DeenifyUzBot'
 ).strip()
-# Click hosted links do not create reusable card tokens. Keep false unless a
-# separate Click recurring agreement flow is implemented.
-CLICK_RECURRING_ENABLED = os.environ.get('CLICK_RECURRING_ENABLED', 'False') == 'True'
-# Delete unpaid subscription catalog messages after this many seconds (matches payment link TTL).
+# Interface language of the Click payment page (uz|ru|en).
+CLICK_LANG = os.environ.get('CLICK_LANG', 'uz').strip() or 'uz'
+# Referral bonus days granted to the inviter on the invited user's FIRST payment.
+CLICK_REFERRAL_BONUS_DAYS_MONTHLY = int(
+    os.environ.get('CLICK_REFERRAL_BONUS_DAYS_MONTHLY', '10')
+)
+CLICK_REFERRAL_BONUS_DAYS_YEARLY = int(
+    os.environ.get('CLICK_REFERRAL_BONUS_DAYS_YEARLY', '30')
+)
+# Unpaid Click orders older than this are removed by cleanup_stale_click_orders (daily timer).
+CLICK_STALE_ORDER_RETENTION_DAYS = int(
+    os.environ.get('CLICK_STALE_ORDER_RETENTION_DAYS', '1')
+)
+# Test billing: monthly plan lasts N minutes instead of 30 days (0 = production).
+DEENIFY_TEST_MONTHLY_RENEWAL_MINUTES = int(
+    os.environ.get('DEENIFY_TEST_MONTHLY_RENEWAL_MINUTES', '0')
+)
+# Delete unpaid subscription catalog messages after this many seconds.
 OFFER_MESSAGE_TTL_SECONDS = int(os.environ.get('OFFER_MESSAGE_TTL_SECONDS', '3600'))
 
 # Quiz (Telegram bot round-based flow)
@@ -333,3 +270,4 @@ DEENIFY_QUIZ_FIRST_ROUND_EASY_COUNT = int(
 DEENIFY_QUIZ_SUBSCRIPTION_REQUIRED = (
     os.environ.get('DEENIFY_QUIZ_SUBSCRIPTION_REQUIRED', 'False') == 'True'
 )
+

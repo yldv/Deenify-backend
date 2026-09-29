@@ -1,9 +1,6 @@
-import time
-
 from django.conf import settings
-from django.http import HttpResponseForbidden, HttpResponseNotFound
-from django.shortcuts import redirect, render
-from django.urls import reverse
+from django.http import HttpResponseNotFound
+from django.shortcuts import render
 from django.utils import timezone, translation
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -15,11 +12,11 @@ from rest_framework.views import APIView
 from core.api import get_requested_language, get_telegram_user, user_not_found_response
 from core.bot_api import BotProtectedAPIView
 
-from .models import AtmosOrder, Feedback, SubscriptionPlan, TelegramUser
+from .models import ClickOrder, Feedback, SubscriptionPlan, TelegramUser
 from .serializers import (
-    AtmosOrderCreateResponseSerializer,
-    AtmosOrderCreateSerializer,
-    AtmosOrderSerializer,
+    ClickOrderCreateResponseSerializer,
+    ClickOrderCreateSerializer,
+    ClickOrderSerializer,
     FeedbackCreateSerializer,
     SubscriptionPlanSerializer,
     TelegramUserBotActiveSerializer,
@@ -29,28 +26,19 @@ from .serializers import (
     TelegramUserUpsertSerializer,
 )
 from .services import (
-    CARD_SESSION_TOKEN_TTL,
-    AtmosPaymentService,
-    build_card_session_token,
+    ClickPaymentService,
     build_referral_link,
-    charge_subscription,
-    confirm_card_binding,
+    cancel_subscription,
+    click_checkout_context,
     create_click_order,
-    create_atmos_order,
     get_active_plan,
     get_active_premium_subscription,
     get_admin_statistics,
     get_referral_stats,
     get_user_statistics,
-    process_atmos_callback,
     process_click_callback,
-    parse_atmos_callback_payload,
-    remove_bound_card,
     set_telegram_user_bot_active,
-    start_card_binding,
-    sync_atmos_order_payment,
     upsert_telegram_user,
-    verify_card_session_token,
     verify_payment_start_signature,
 )
 
@@ -182,7 +170,8 @@ class BotUserReferralView(BotProtectedAPIView):
 
 @extend_schema(tags=["bot-users"], responses={200: OpenApiTypes.OBJECT})
 class BotUserCancelSubscriptionView(BotProtectedAPIView):
-    """Cancel any automatic renewal. Premium remains active until expiry."""
+    """Close the current premium period. Click charges per purchase, so there is
+    no stored card or auto-renewal to switch off."""
 
     def post(self, request, telegram_id):
         user = get_telegram_user(telegram_id)
@@ -190,13 +179,12 @@ class BotUserCancelSubscriptionView(BotProtectedAPIView):
             return user_not_found_response()
 
         active = get_active_premium_subscription(user)
-        result = remove_bound_card(user)
+        result = cancel_subscription(user)
         expires_at = active.expires_at if active else None
         return Response(
             {
                 "ok": result.get("ok", True),
-                "removed": result.get("removed", False),
-                "had_premium": bool(active),
+                "had_premium": bool(result.get("had_premium")),
                 "expires_at": expires_at.strftime("%d.%m.%Y") if expires_at else "",
             },
             status=status.HTTP_200_OK,
@@ -254,14 +242,46 @@ class SubscriptionPlanListView(BotProtectedAPIView):
         return Response(data, status=status.HTTP_200_OK)
 
 
+# ---------------------------------------------------------------------------
+# Click payments
+# ---------------------------------------------------------------------------
+
+CHECKOUT_TEMPLATE = "payments/click_checkout.html"
+RETURN_TEMPLATE = "payments/click_return.html"
+
+
+def _bot_url() -> str:
+    return (settings.CLICK_BOT_URL or "https://t.me/DeenifyUzBot").strip()
+
+
+def _render_checkout(request, order, *, status_code=200):
+    return render(
+        request,
+        CHECKOUT_TEMPLATE,
+        click_checkout_context(order),
+        status=status_code,
+    )
+
+
+def _render_checkout_error(request, message, *, status_code=403):
+    return render(
+        request,
+        CHECKOUT_TEMPLATE,
+        {"error": message, "bot_url": _bot_url()},
+        status=status_code,
+    )
+
+
 @extend_schema(
     tags=["payments"],
-    request=AtmosOrderCreateSerializer,
-    responses={201: AtmosOrderCreateResponseSerializer},
+    request=ClickOrderCreateSerializer,
+    responses={201: ClickOrderCreateResponseSerializer},
 )
 class ClickOrderCreateView(BotProtectedAPIView):
+    """Bot-facing endpoint: create a Click order and get the checkout page link."""
+
     def post(self, request):
-        serializer = AtmosOrderCreateSerializer(data=request.data)
+        serializer = ClickOrderCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         user = get_telegram_user(serializer.validated_data["telegram_id"])
@@ -275,17 +295,15 @@ class ClickOrderCreateView(BotProtectedAPIView):
             return Response({"detail": "Subscription plan not found."}, status=status.HTTP_404_NOT_FOUND)
 
         order = create_click_order(user=user, plan=plan)
-        data = AtmosOrderCreateResponseSerializer(order).data
-        if not order.payment_url:
-            return Response(
-                data,
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
+        data = ClickOrderCreateResponseSerializer(order).data
+        if not order.checkout_url:
+            return Response(data, status=status.HTTP_502_BAD_GATEWAY)
         return Response(data, status=status.HTTP_201_CREATED)
 
 
 class ClickPaymentStartView(APIView):
-    """Create one Click order from the bot's signed plan link and show our checkout page."""
+    """Entry point of the bot's plan buttons: verify the signed link, create one
+    Click order and render our own checkout page."""
 
     authentication_classes = ()
     permission_classes = ()
@@ -296,9 +314,7 @@ class ClickPaymentStartView(APIView):
             plan_id = int(request.GET.get("plan_id", ""))
             exp = int(request.GET.get("exp", ""))
         except (TypeError, ValueError):
-            return render(
-                request, "payments/click_checkout.html", {"error": "Invalid payment link."}, status=403
-            )
+            return _render_checkout_error(request, "Invalid payment link.", status_code=403)
 
         if not verify_payment_start_signature(
             telegram_id=telegram_id,
@@ -306,46 +322,57 @@ class ClickPaymentStartView(APIView):
             exp=exp,
             signature=(request.GET.get("sig") or "").strip(),
         ):
-            return render(
-                request,
-                "payments/click_checkout.html",
-                {"error": "Payment link is invalid or expired."},
-                status=403,
+            return _render_checkout_error(
+                request, "Payment link is invalid or expired.", status_code=403
             )
 
         user = get_telegram_user(telegram_id)
+        if not user:
+            return _render_checkout_error(request, "User not found.", status_code=404)
+        if user.is_blocked:
+            return _render_checkout_error(request, "User is blocked.", status_code=403)
+
         plan = get_active_plan(plan_id)
-        if not user or user.is_blocked or not plan:
-            return render(
-                request,
-                "payments/click_checkout.html",
-                {"error": "Payment link is unavailable."},
-                status=404,
-            )
+        if not plan:
+            return _render_checkout_error(request, "Subscription plan not found.", status_code=404)
 
         order = create_click_order(user=user, plan=plan)
-        if not order.payment_url:
+        if not order.checkout_url:
+            error = (order.response_payload or {}).get("error")
+            return _render_checkout_error(
+                request, error or "Click payment is unavailable.", status_code=503
+            )
+        return _render_checkout(request, order)
+
+
+class ClickOrderCheckoutView(APIView):
+    """Reopen the checkout page of an order created through the bot API."""
+
+    authentication_classes = ()
+    permission_classes = ()
+
+    def get(self, request, order_id):
+        order = (
+            ClickOrder.objects.select_related("plan")
+            .filter(order_id=order_id)
+            .first()
+        )
+        if not order:
+            return HttpResponseNotFound("Payment link not found.")
+        if order.status == ClickOrder.Status.PAID:
             return render(
                 request,
-                "payments/click_checkout.html",
-                {"error": (order.response_payload or {}).get("error", "Click payment is unavailable.")},
-                status=503,
+                RETURN_TEMPLATE,
+                {"paid": True, "bot_url": _bot_url()},
             )
-        return render(
-            request,
-            "payments/click_checkout.html",
-            {
-                "payment_url": order.payment_url,
-                "plan_name": plan.name,
-                "amount": f"{order.amount:,.0f}".replace(",", " "),
-                "currency": order.currency,
-                "bot_url": settings.CLICK_RETURN_URL or "https://t.me/DeenifyUzBot",
-            },
-        )
+        try:
+            return _render_checkout(request, order)
+        except ValueError as exc:
+            return _render_checkout_error(request, str(exc), status_code=503)
 
 
 class ClickCallbackView(APIView):
-    """Click Merchant API callback endpoint (register this exact URL in Click)."""
+    """Click Merchant API callback (register this exact URL in the Click cabinet)."""
 
     authentication_classes = ()
     permission_classes = ()
@@ -354,302 +381,39 @@ class ClickCallbackView(APIView):
         return Response(process_click_callback(request.data), status=status.HTTP_200_OK)
 
 
-@extend_schema(
-    tags=["payments"],
-    request=OpenApiTypes.OBJECT,
-    responses={200: OpenApiTypes.OBJECT},
-)
-class AtmosPaymentStartView(APIView):
-    """One-tap plan button: render the card payment form (create -> pre-apply -> apply)."""
+class ClickReturnView(APIView):
+    """Click sends the customer back here after the payment page."""
 
     authentication_classes = ()
     permission_classes = ()
 
     def get(self, request):
-        try:
-            telegram_id = int(request.GET.get("telegram_id", ""))
-            plan_id = int(request.GET.get("plan_id", ""))
-            exp = int(request.GET.get("exp", ""))
-        except (TypeError, ValueError):
-            return render(request, "payments/atmos_card.html", {"error": "Invalid payment link."}, status=403)
-
-        signature = (request.GET.get("sig") or "").strip()
-        if not verify_payment_start_signature(
-            telegram_id=telegram_id,
-            plan_id=plan_id,
-            exp=exp,
-            signature=signature,
-        ):
-            return render(
-                request,
-                "payments/atmos_card.html",
-                {"error": "Payment link is invalid or expired."},
-                status=403,
-            )
-
-        user = get_telegram_user(telegram_id)
-        if not user:
-            return render(request, "payments/atmos_card.html", {"error": "User not found."}, status=404)
-        if user.is_blocked:
-            return render(request, "payments/atmos_card.html", {"error": "User is blocked."}, status=403)
-
-        plan = get_active_plan(plan_id)
-        if not plan:
-            return render(request, "payments/atmos_card.html", {"error": "Subscription plan not found."}, status=404)
-
-        lang = (getattr(user, "language", "") or "uz").strip()
-        if lang not in ("uz", "uz_cy", "ru"):
-            lang = "uz"
-        context = {
-            "telegram_id": telegram_id,
-            "plan_id": plan_id,
-            "exp": exp,
-            "sig": signature,
-            "plan_name": plan.name,
-            "amount": int(plan.price),
-            "currency": plan.currency or "UZS",
-            "lang": lang,
-            "preapply_url": reverse("atmos-card-preapply"),
-            "apply_url": reverse("atmos-card-apply"),
-            "set_language_url": reverse("atmos-card-set-language"),
-            "bot_url": settings.ATMOS_SUCCESS_REDIRECT_URL or "https://t.me/DeenifyUzBot",
-        }
-        return render(request, "payments/atmos_card.html", context)
-
-
-class AtmosCardPreApplyView(APIView):
-    """Start Atmos card binding (/partner/bind-card/init). Atmos sends the SMS code."""
-
-    authentication_classes = ()
-    permission_classes = ()
-
-    def post(self, request):
-        data = request.data
-        try:
-            telegram_id = int(data.get("telegram_id"))
-            plan_id = int(data.get("plan_id"))
-            exp = int(data.get("exp"))
-        except (TypeError, ValueError):
-            return Response({"ok": False, "error": "Invalid request."}, status=400)
-
-        if not verify_payment_start_signature(
-            telegram_id=telegram_id, plan_id=plan_id, exp=exp, signature=(data.get("sig") or "").strip()
-        ):
-            return Response({"ok": False, "error": "Invalid or expired link."}, status=403)
-
-        card_number = (data.get("card_number") or "").replace(" ", "").strip()
-        expiry = (data.get("expiry") or "").strip()
-        if len(card_number) < 16 or len(expiry) != 4:
-            return Response({"ok": False, "error": "Karta raqami yoki amal qilish muddati noto'g'ri."}, status=400)
-
-        user = get_telegram_user(telegram_id)
-        if not user or user.is_blocked:
-            return Response({"ok": False, "error": "User not available."}, status=403)
-        plan = get_active_plan(plan_id)
-        if not plan:
-            return Response({"ok": False, "error": "Plan not found."}, status=404)
-
-        result = start_card_binding(card_number=card_number, expiry=expiry)
-        if not result.get("ok"):
-            return Response({"ok": False, "error": result.get("error") or "Bind init failed."}, status=502)
-
-        bind_transaction_id = result["transaction_id"]
-        token_exp = int(time.time()) + CARD_SESSION_TOKEN_TTL
-        token = build_card_session_token(order_id=bind_transaction_id, exp=token_exp)
-        return Response(
+        service = ClickPaymentService()
+        return render(
+            request,
+            RETURN_TEMPLATE,
             {
-                "ok": True,
-                "bind_transaction_id": bind_transaction_id,
-                "phone": result.get("phone", ""),
-                "token": token,
-                "token_exp": token_exp,
-            }
-        )
-
-
-def _subscription_summary(order):
-    """Plan + duration info for the success screen."""
-    plan = order.plan
-    subscription = getattr(order, "premium_subscription", None)
-    expires_at = subscription.expires_at if subscription else None
-    return {
-        "plan_name": plan.name if plan else "Premium",
-        "period": plan.period if plan else "month",
-        "duration": plan.duration if plan else 1,
-        "is_lifetime": bool(plan and plan.period == "lifetime") or (subscription is not None and expires_at is None),
-        "expires_at": expires_at.strftime("%d.%m.%Y") if expires_at else "",
-    }
-
-
-class AtmosCardApplyView(APIView):
-    """Confirm card binding with the SMS code, then charge the first period by token."""
-
-    authentication_classes = ()
-    permission_classes = ()
-
-    def post(self, request):
-        data = request.data
-        bind_transaction_id = (str(data.get("bind_transaction_id") or "")).strip()
-        otp = (str(data.get("otp")) or "").strip()
-        try:
-            telegram_id = int(data.get("telegram_id"))
-            plan_id = int(data.get("plan_id"))
-            exp = int(data.get("exp"))
-            token_exp = int(data.get("token_exp"))
-        except (TypeError, ValueError):
-            return Response({"ok": False, "error": "Invalid session."}, status=400)
-
-        if not verify_payment_start_signature(
-            telegram_id=telegram_id, plan_id=plan_id, exp=exp, signature=(data.get("sig") or "").strip()
-        ):
-            return Response({"ok": False, "error": "Invalid or expired link."}, status=403)
-
-        if not verify_card_session_token(
-            order_id=bind_transaction_id, exp=token_exp, token=(data.get("token") or "").strip()
-        ):
-            return Response({"ok": False, "error": "Sessiya muddati tugagan. Qaytadan urinib ko'ring."}, status=403)
-
-        if not otp.isdigit():
-            return Response({"ok": False, "error": "SMS kodni to'g'ri kiriting."}, status=400)
-
-        user = get_telegram_user(telegram_id)
-        if not user or user.is_blocked:
-            return Response({"ok": False, "error": "User not available."}, status=403)
-        plan = get_active_plan(plan_id)
-        if not plan:
-            return Response({"ok": False, "error": "Plan not found."}, status=404)
-
-        bind_result = confirm_card_binding(
-            user=user, transaction_id=bind_transaction_id, otp=otp
-        )
-        if not bind_result.get("ok"):
-            return Response(
-                {"ok": False, "error": bind_result.get("error") or "Kartani bog'lab bo'lmadi."},
-                status=502,
-            )
-
-        charge = charge_subscription(
-            user=user,
-            plan=plan,
-            card_data=bind_result["card_data"],
-            is_auto_renewal=False,
-        )
-        if not charge.get("ok"):
-            return Response(
-                {"ok": False, "error": charge.get("error") or "To'lov amalga oshmadi."},
-                status=502,
-            )
-
-        return Response(
-            {
-                "ok": True,
-                "redirect": settings.ATMOS_SUCCESS_REDIRECT_URL or "https://t.me/DeenifyUzBot",
-                "subscription": _subscription_summary(charge["order"]),
-            }
-        )
-
-
-class AtmosCardSetLanguageView(APIView):
-    """Persist the language chosen on the payment page to the user's profile so the
-    bot (and all backend messages) switch to it too."""
-
-    authentication_classes = ()
-    permission_classes = ()
-
-    def post(self, request):
-        data = request.data
-        try:
-            telegram_id = int(data.get("telegram_id"))
-            plan_id = int(data.get("plan_id"))
-            exp = int(data.get("exp"))
-        except (TypeError, ValueError):
-            return Response({"ok": False, "error": "Invalid request."}, status=400)
-
-        if not verify_payment_start_signature(
-            telegram_id=telegram_id, plan_id=plan_id, exp=exp, signature=(data.get("sig") or "").strip()
-        ):
-            return Response({"ok": False, "error": "Invalid or expired link."}, status=403)
-
-        language = (data.get("language") or "").strip()
-        valid_languages = {choice[0] for choice in TelegramUser.Language.choices}
-        if language not in valid_languages:
-            return Response({"ok": False, "error": "Unsupported language."}, status=400)
-
-        user = get_telegram_user(telegram_id)
-        if not user:
-            return user_not_found_response()
-        if user.language != language:
-            user.language = language
-            user.save(update_fields=("language", "updated_at"))
-        return Response({"ok": True})
-
-
-class AtmosCheckoutRedirectView(APIView):
-    authentication_classes = ()
-    permission_classes = ()
-
-    def get(self, request, order_id):
-        order = AtmosOrder.objects.filter(order_id=order_id).first()
-        if not order or not order.payment_url:
-            return HttpResponseNotFound("Payment link not found.")
-
-        target = AtmosPaymentService.client_checkout_url(order.payment_url)
-        return redirect(target)
-
-
-class AtmosCallbackView(APIView):
-    authentication_classes = ()
-    permission_classes = ()
-
-    def post(self, request):
-        payload = parse_atmos_callback_payload(request)
-        result = process_atmos_callback(payload)
-        return Response(
-            {
-                "status": result.get("atmos_status", 0),
-                "message": result.get("message", "Error"),
+                "bot_url": _bot_url(),
+                "service_id": settings.CLICK_SERVICE_ID,
+                "merchant_id": settings.CLICK_MERCHANT_ID,
+                "configured": service.is_configured(),
             },
-            status=result.get("http_status", 200),
         )
 
 
-class AtmosReturnView(APIView):
-    """Redirect after payment on test-checkout.pays.uz / checkout.pays.uz."""
-
-    authentication_classes = ()
-    permission_classes = ()
-
-    def get(self, request):
-        transaction_id = (
-            request.query_params.get("transactionId")
-            or request.query_params.get("transaction_id")
-        )
-        if transaction_id:
-            order = AtmosOrder.objects.filter(
-                atmos_transaction_id=str(transaction_id)
-            ).first()
-            if order:
-                sync_atmos_order_payment(order)
-
-        return_url = (
-            settings.ATMOS_SUCCESS_REDIRECT_URL or "https://t.me/DeenifyUzBot"
-        ).strip()
-        return redirect(return_url)
-
-
-@extend_schema(tags=["bot-users"], responses={200: AtmosOrderSerializer(many=True)})
+@extend_schema(tags=["bot-users"], responses={200: ClickOrderSerializer(many=True)})
 class BotUserOrdersView(BotProtectedAPIView):
     def get(self, request, telegram_id):
         user = get_telegram_user(telegram_id)
         if not user:
             return user_not_found_response()
         orders = (
-            AtmosOrder.objects.filter(user=user)
+            ClickOrder.objects.filter(user=user)
             .select_related("plan")
             .order_by("-created_at")
         )
         with translation.override(get_requested_language(request, user)):
-            data = AtmosOrderSerializer(orders, many=True).data
+            data = ClickOrderSerializer(orders, many=True).data
         return Response(data, status=status.HTTP_200_OK)
 
 
