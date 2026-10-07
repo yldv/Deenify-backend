@@ -37,6 +37,8 @@ from .services import (
     get_referral_stats,
     get_user_statistics,
     process_click_callback,
+    process_click_complete,
+    process_click_prepare,
     set_telegram_user_bot_active,
     upsert_telegram_user,
     verify_payment_start_signature,
@@ -372,13 +374,37 @@ class ClickOrderCheckoutView(APIView):
 
 
 class ClickCallbackView(APIView):
-    """Click Merchant API callback (register this exact URL in the Click cabinet)."""
+    """Click Merchant API callback (register this exact URL in the Click cabinet).
+
+    Note: prefer separate prepare/complete endpoints. This view remains
+    for backward compatibility.
+    """
 
     authentication_classes = ()
     permission_classes = ()
 
     def post(self, request):
         return Response(process_click_callback(request.data), status=status.HTTP_200_OK)
+
+
+class ClickPrepareCallbackView(APIView):
+    """Click Prepare callback (action=0)."""
+
+    authentication_classes = ()
+    permission_classes = ()
+
+    def post(self, request):
+        return Response(process_click_prepare(request.data), status=status.HTTP_200_OK)
+
+
+class ClickCompleteCallbackView(APIView):
+    """Click Complete callback (action=1)."""
+
+    authentication_classes = ()
+    permission_classes = ()
+
+    def post(self, request):
+        return Response(process_click_complete(request.data), status=status.HTTP_200_OK)
 
 
 class ClickReturnView(APIView):

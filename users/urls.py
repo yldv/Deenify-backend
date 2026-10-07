@@ -13,9 +13,11 @@ from .views import (
     BotUserStatisticsView,
     BotUserView,
     ClickCallbackView,
+    ClickCompleteCallbackView,
     ClickOrderCheckoutView,
     ClickOrderCreateView,
     ClickPaymentStartView,
+    ClickPrepareCallbackView,
     ClickReturnView,
     SubscriptionPlanListView,
 )
@@ -91,6 +93,16 @@ urlpatterns = [
         "api/v1/payments/click/callback/",
         ClickCallbackView.as_view(),
         name="click-callback",
+    ),
+    path(
+        "api/v1/payments/click/callback/prepare/",
+        ClickPrepareCallbackView.as_view(),
+        name="click-callback-prepare",
+    ),
+    path(
+        "api/v1/payments/click/callback/complete/",
+        ClickCompleteCallbackView.as_view(),
+        name="click-callback-complete",
     ),
     path(
         "api/v1/payments/click/return/",

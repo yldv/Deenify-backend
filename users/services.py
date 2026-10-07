@@ -426,8 +426,8 @@ def click_checkout_context(order) -> dict:
     }
 
 
-def process_click_callback(payload):
-    """Handle Click's Merchant API calls: Prepare (action=0) and Complete (action=1)."""
+def _process_click_common(payload):
+    """Validate common Click callback fields and return (service, base, order)."""
     service = ClickPaymentService()
     base = {
         "click_trans_id": str(payload.get("click_trans_id", "")),
@@ -435,14 +435,14 @@ def process_click_callback(payload):
     }
 
     if str(payload.get("service_id", "")) != str(settings.CLICK_SERVICE_ID):
-        return {**base, "error": -8, "error_note": "Error in service_id"}
+        return None, {**base, "error": -8, "error_note": "Error in service_id"}, None
     if settings.CLICK_MERCHANT_ID and str(payload.get("merchant_id", "")) != str(
         settings.CLICK_MERCHANT_ID
     ):
-        return {**base, "error": -7, "error_note": "Error in merchant_id"}
+        return None, {**base, "error": -7, "error_note": "Error in merchant_id"}, None
     if not service.is_valid_signature(payload):
         logger.warning("Click callback signature check failed %s", base)
-        return {**base, "error": -1, "error_note": "SIGN CHECK FAILED!"}
+        return None, {**base, "error": -1, "error_note": "SIGN CHECK FAILED!"}, None
 
     order = (
         ClickOrder.objects.select_related("plan", "user")
@@ -450,7 +450,7 @@ def process_click_callback(payload):
         .first()
     )
     if not order:
-        return {**base, "error": -5, "error_note": "User does not exist"}
+        return None, {**base, "error": -5, "error_note": "User does not exist"}, None
     if service.amount_string(payload.get("amount", "0")) != service.amount_string(order.amount):
         logger.warning(
             "Click callback amount mismatch order=%s callback=%s expected=%s",
@@ -458,42 +458,77 @@ def process_click_callback(payload):
             payload.get("amount"),
             order.amount,
         )
-        return {**base, "error": -2, "error_note": "Incorrect parameter amount"}
+        return None, {**base, "error": -2, "error_note": "Incorrect parameter amount"}, None
+
+    return service, base, order
+
+
+def process_click_prepare(payload):
+    """Handle Click Prepare callback (action=0)."""
+    service, base, order = _process_click_common(payload)
+    if service is None:
+        if base.get("error") is not None:
+            return base
+        return {**base, "error": -5, "error_note": "User does not exist"}
+    if not order:
+        return base
+
+    if order.status not in (
+        ClickOrder.Status.CREATED,
+        ClickOrder.Status.PENDING,
+        ClickOrder.Status.PAID,
+    ):
+        return {**base, "error": -9, "error_note": "Transaction cancelled"}
+    return {**base, "merchant_prepare_id": order.pk, "error": 0, "error_note": "Success"}
+
+
+def process_click_complete(payload):
+    """Handle Click Complete callback (action=1)."""
+    service, base, order = _process_click_common(payload)
+    if service is None:
+        if base.get("error") is not None:
+            return base
+        return {**base, "error": -5, "error_note": "User does not exist"}
+    if not order:
+        return base
+
+    if str(payload.get("merchant_prepare_id", "")) != str(order.pk):
+        return {**base, "error": -6, "error_note": "Transaction does not exist"}
+    if str(payload.get("error", "0")) != "0":
+        _mark_order_failed(order, {"click_callback": dict(payload)})
+        return {
+            **base,
+            "merchant_confirm_id": order.pk,
+            "error": -9,
+            "error_note": "Transaction cancelled",
+        }
+    if _click_trans_already_used(order, base["click_trans_id"]):
+        return {
+            **base,
+            "merchant_confirm_id": order.pk,
+            "error": -9,
+            "error_note": "Transaction cancelled",
+        }
+
+    _record_click_transaction(order, base["click_trans_id"], dict(payload))
+    order.mark_as_paid(click_trans_id=base["click_trans_id"], payload={"click_callback": dict(payload)})
+    after_order_paid(order)
+    return {**base, "merchant_confirm_id": order.pk, "error": 0, "error_note": "Success"}
+
+
+def process_click_callback(payload):
+    """Handle Click's Merchant API calls: Prepare (action=0) and Complete (action=1)."""
+    service, base, order = _process_click_common(payload)
+    if service is None:
+        if base.get("error") is not None:
+            return base
+        return {**base, "error": -5, "error_note": "User does not exist"}
 
     action = str(payload.get("action", ""))
-    if action == "0":  # Prepare: validate the order, do not grant premium yet.
-        if order.status not in (
-            ClickOrder.Status.CREATED,
-            ClickOrder.Status.PENDING,
-            ClickOrder.Status.PAID,
-        ):
-            return {**base, "error": -9, "error_note": "Transaction cancelled"}
-        return {**base, "merchant_prepare_id": order.pk, "error": 0, "error_note": "Success"}
-
-    if action == "1":  # Complete: Click has charged the customer.
-        if str(payload.get("merchant_prepare_id", "")) != str(order.pk):
-            return {**base, "error": -6, "error_note": "Transaction does not exist"}
-        if str(payload.get("error", "0")) != "0":
-            _mark_order_failed(order, {"click_callback": dict(payload)})
-            return {
-                **base,
-                "merchant_confirm_id": order.pk,
-                "error": -9,
-                "error_note": "Transaction cancelled",
-            }
-        if _click_trans_already_used(order, base["click_trans_id"]):
-            return {
-                **base,
-                "merchant_confirm_id": order.pk,
-                "error": -9,
-                "error_note": "Transaction cancelled",
-            }
-
-        _record_click_transaction(order, base["click_trans_id"], dict(payload))
-        order.mark_as_paid(click_trans_id=base["click_trans_id"], payload={"click_callback": dict(payload)})
-        after_order_paid(order)
-        return {**base, "merchant_confirm_id": order.pk, "error": 0, "error_note": "Success"}
-
+    if action == "0":  # Prepare
+        return process_click_prepare(payload)
+    if action == "1":  # Complete
+        return process_click_complete(payload)
     return {**base, "error": -3, "error_note": "Action not found"}
 
 
