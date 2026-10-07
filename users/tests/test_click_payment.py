@@ -215,6 +215,32 @@ class ClickCallbackTests(TestCase):
         payload["sign_string"] = _sign(payload, action="0")
         self.assertEqual(process_click_callback(payload)["error"], -8)
 
+    @patch("users.notifications.notify_payment_success")
+    def test_shop_callbacks_without_merchant_id(self, _notify):
+        prepare_payload = _callback_payload(self.order, action="0")
+        prepare_payload.pop("merchant_id")
+        prepare = process_click_callback(prepare_payload)
+        self.assertEqual(prepare["error"], 0)
+        self.assertEqual(prepare["merchant_prepare_id"], self.order.pk)
+
+        complete_payload = _callback_payload(self.order, action="1")
+        complete_payload.pop("merchant_id")
+        complete = process_click_callback(complete_payload)
+        self.assertEqual(complete["error"], 0)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, ClickOrder.Status.PAID)
+
+    def test_wrong_explicit_merchant_id(self):
+        payload = _callback_payload(self.order)
+        payload["merchant_id"] = "wrong-merchant"
+        self.assertEqual(process_click_callback(payload)["error"], -7)
+
+    def test_missing_merchant_id_still_requires_valid_signature(self):
+        payload = _callback_payload(self.order)
+        payload.pop("merchant_id")
+        payload["sign_string"] = "0" * 32
+        self.assertEqual(process_click_callback(payload)["error"], -1)
+
     def test_bad_signature(self):
         payload = _callback_payload(self.order)
         payload["sign_string"] = "0" * 32

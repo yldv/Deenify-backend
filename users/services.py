@@ -436,8 +436,12 @@ def _process_click_common(payload):
 
     if str(payload.get("service_id", "")) != str(settings.CLICK_SERVICE_ID):
         return None, {**base, "error": -8, "error_note": "Error in service_id"}, None
-    if settings.CLICK_MERCHANT_ID and str(payload.get("merchant_id", "")) != str(
+    # Click SHOP API callbacks omit merchant_id; service_id and the signature
+    # authenticate the callback. Check merchant_id only when explicitly supplied.
+    if (
         settings.CLICK_MERCHANT_ID
+        and "merchant_id" in payload
+        and str(payload["merchant_id"]) != str(settings.CLICK_MERCHANT_ID)
     ):
         return None, {**base, "error": -7, "error_note": "Error in merchant_id"}, None
     if not service.is_valid_signature(payload):

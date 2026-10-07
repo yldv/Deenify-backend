@@ -1,6 +1,7 @@
 import hashlib
 import time
 from urllib.parse import urlencode
+from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -168,6 +169,26 @@ class ClickCheckoutPageTests(TestCase):
         response = self.client.post(reverse("click-callback"), _callback_payload(order))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["error"], 0)
+
+    @patch("users.notifications.notify_payment_success")
+    def test_separate_shop_callbacks_without_merchant_id(self, _notify):
+        self.client.get(self._start_url())
+        order = ClickOrder.objects.get()
+        prepare_payload = _callback_payload(order, action="0")
+        prepare_payload.pop("merchant_id")
+        response = self.client.post(reverse("click-callback-prepare"), prepare_payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["error"], 0)
+        order.refresh_from_db()
+        self.assertNotEqual(order.status, ClickOrder.Status.PAID)
+
+        complete_payload = _callback_payload(order, action="1")
+        complete_payload.pop("merchant_id")
+        response = self.client.post(reverse("click-callback-complete"), complete_payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["error"], 0)
+        order.refresh_from_db()
+        self.assertEqual(order.status, ClickOrder.Status.PAID)
 
     def test_checkout_and_callback_url_names(self):
         self.assertEqual(
