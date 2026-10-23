@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="refresh" content="6;url={{ bot_url }}">
+  {% if payment_status == "pending" or payment_status == "created" %}
+  <meta http-equiv="refresh" content="3">
+  {% endif %}
   <title>Deenify — To'lov natijasi</title>
   <style>
     :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -21,10 +23,24 @@
 <body>
   <main>
   <div class="brand">Deenify</div>
+  {% if payment_status == "paid" %}
   <div class="icon">✅</div>
-  <h1>To'lovni tekshirmoqdamiz</h1>
-  <p>Click to'lovni tasdiqladi. Premium obuna bir necha soniya ichida faollashtiriladi —
-     aniq holatni botdagi profil bo'limida ko'rasiz.</p>
+  <h1>To'lov tasdiqlandi</h1>
+  <p>Premium obunangiz faollashtirildi.</p>
+  {% elif payment_status == "pending" or payment_status == "created" %}
+  <div class="icon">⏳</div>
+  <h1>To'lovni kutmoqdamiz</h1>
+  <p>Click hali to'lovni tasdiqlamadi. Sahifa avtomatik tekshirilmoqda.</p>
+  {% elif payment_status == "expired" %}
+  <h1>To'lov muddati tugadi</h1>
+  <p>Yangi to'lov havolasini botdan oching.</p>
+  {% elif payment_status == "canceled" or payment_status == "failed" %}
+  <h1>To'lov amalga oshmadi</h1>
+  <p>Botdan qayta urinib ko'ring.</p>
+  {% else %}
+  <h1>To'lov tasdiqlanmadi</h1>
+  <p>Buyurtma topilmadi. Holatni botdagi profil bo'limidan tekshiring.</p>
+  {% endif %}
   <a class="button" href="{{ bot_url }}">Botga qaytish</a>
     {% if service_id %}
       <div class="order">Click service_id: {{ service_id }} · merchant_id: {{ merchant_id }}</div>

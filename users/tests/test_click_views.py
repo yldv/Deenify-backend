@@ -154,6 +154,37 @@ class ClickCheckoutPageTests(TestCase):
         self.assertTemplateUsed(response, "payments/click_return.html")
         self.assertIn("t.me/DeenifyUzBot", response.content.decode())
 
+    def test_return_without_order_never_claims_success(self):
+        response = self.client.get(reverse("click-return"), {"status": "paid"})
+        self.assertContains(response, "To'lov tasdiqlanmadi")
+        self.assertNotContains(response, "To'lov tasdiqlandi")
+
+    @patch("users.notifications.notify_payment_success")
+    def test_return_waits_until_complete_callback(self, _notify):
+        self.client.get(self._start_url())
+        order = ClickOrder.objects.get()
+        url = reverse("click-return") + "?" + urlencode({"order_id": order.order_id})
+        self.client.post(reverse("click-callback-prepare"), _callback_payload(order))
+        response = self.client.get(url)
+        self.assertContains(response, "To'lovni kutmoqdamiz")
+        self.assertContains(response, 'content="3"')
+        self.assertNotContains(response, "To'lov tasdiqlandi")
+        self.client.post(reverse("click-callback-complete"), _callback_payload(order, action="1"))
+        response = self.client.get(url)
+        self.assertContains(response, "To'lov tasdiqlandi")
+        self.assertNotContains(response, 'http-equiv="refresh"')
+        self.assertEqual(response["Cache-Control"], "no-store")
+
+    def test_return_stops_waiting_for_terminal_status(self):
+        self.client.get(self._start_url())
+        order = ClickOrder.objects.get()
+        for status in (ClickOrder.Status.EXPIRED, ClickOrder.Status.CANCELED, ClickOrder.Status.FAILED):
+            order.status = status
+            order.save(update_fields=("status",))
+            response = self.client.get(reverse("click-return"), {"order_id": order.order_id})
+            self.assertNotContains(response, "To'lov tasdiqlandi")
+            self.assertNotContains(response, 'http-equiv="refresh"')
+
     def test_callback_endpoint_is_public(self):
         self.client.get(self._start_url())
         order = ClickOrder.objects.get()

@@ -4,7 +4,7 @@ import logging
 import time
 from decimal import Decimal
 from secrets import randbelow
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 
 logger = logging.getLogger(__name__)
 
@@ -269,11 +269,18 @@ class ClickPaymentService:
             "currency": (order.currency or "UZS").upper(),
             "description": f"Deenify: {plan_name}",
             "lang": settings.CLICK_LANG,
-            "return_url": settings.CLICK_RETURN_URL,
+            "return_url": self.return_url(order),
         }
         if settings.CLICK_MERCHANT_USER_ID:
             fields["merchant_user_id"] = settings.CLICK_MERCHANT_USER_ID
         return fields
+
+    @staticmethod
+    def return_url(order):
+        parts = urlsplit(settings.CLICK_RETURN_URL)
+        query = [(k, v) for k, v in parse_qsl(parts.query) if k != "order_id"]
+        query.append(("order_id", order.order_id))
+        return urlunsplit(parts._replace(query=urlencode(query)))
 
     def _require_config(self):
         missing = self.missing_config_fields()

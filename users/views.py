@@ -365,7 +365,7 @@ class ClickOrderCheckoutView(APIView):
             return render(
                 request,
                 RETURN_TEMPLATE,
-                {"paid": True, "bot_url": _bot_url()},
+                {"payment_status": "paid", "bot_url": _bot_url()},
             )
         try:
             return _render_checkout(request, order)
@@ -414,17 +414,13 @@ class ClickReturnView(APIView):
     permission_classes = ()
 
     def get(self, request):
-        service = ClickPaymentService()
-        return render(
-            request,
-            RETURN_TEMPLATE,
-            {
-                "bot_url": _bot_url(),
-                "service_id": settings.CLICK_SERVICE_ID,
-                "merchant_id": settings.CLICK_MERCHANT_ID,
-                "configured": service.is_configured(),
-            },
-        )
+        order = ClickOrder.objects.filter(order_id=request.GET.get("order_id", "")).first()
+        response = render(request, RETURN_TEMPLATE, {
+            "bot_url": _bot_url(),
+            "payment_status": order.status if order else "unknown",
+        })
+        response["Cache-Control"] = "no-store"
+        return response
 
 
 @extend_schema(tags=["bot-users"], responses={200: ClickOrderSerializer(many=True)})

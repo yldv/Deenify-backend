@@ -158,6 +158,7 @@ class ClickCheckoutFormTests(SimpleTestCase):
             name = "Oylik obuna"
 
         class FakeOrder:
+            order_id = "public-order-1"
             merchant_order_id = "order-1"
             amount = "30000.00"
             currency = "UZS"
@@ -169,7 +170,7 @@ class ClickCheckoutFormTests(SimpleTestCase):
         self.assertEqual(fields["order_id"], "order-1")
         self.assertEqual(fields["transaction_param"], "order-1")
         self.assertEqual(fields["amount"], "30000.00")
-        self.assertEqual(fields["return_url"], CLICK_SETTINGS["CLICK_RETURN_URL"])
+        self.assertEqual(fields["return_url"], CLICK_SETTINGS["CLICK_RETURN_URL"] + "?order_id=" + "public-order-1")
         self.assertNotIn("merchant_user_id", fields)
 
     def test_merchant_user_id_is_sent_when_set(self):
@@ -177,6 +178,7 @@ class ClickCheckoutFormTests(SimpleTestCase):
             name = "Oylik obuna"
 
         class FakeOrder:
+            order_id = "public-order-1"
             merchant_order_id = "order-1"
             amount = "30000.00"
             currency = "UZS"
