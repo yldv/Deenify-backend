@@ -27,6 +27,7 @@
     {% elif checkout.state == "failed" or order.status == "failed" %}
       <section class="result"><div class="result-icon result-error">!</div><h1>To'lov amalga oshmadi</h1><p>Botdan yangi to'lov havolasini oching.</p>
       {% if provider_code %}<p class="provider-code">Click xato kodi: {{ provider_code }}</p>{% endif %}</section>
+      {% if provider_note %}<div class="notice" role="alert"><p>{{ provider_note }}</p></div>{% endif %}
     {% else %}
       <nav class="steps" aria-label="Jarayon bosqichlari">
         <span class="step {% if not verify %}active{% else %}completed{% endif %}" {% if not verify %}aria-current="step"{% endif %}><b>{% if verify %}✓{% else %}1{% endif %}</b><span>Karta ma'lumotlari</span></span>

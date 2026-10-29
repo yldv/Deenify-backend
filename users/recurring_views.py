@@ -85,7 +85,7 @@ class ClickCardCheckoutView(View):
             from .recurring import sync_renewal
             sync_renewal(self.order)
         checkout = ClickCardCheckout.objects.filter(order=self.order).first()
-        from .recurring import merchant_error_code
+        from .recurring import merchant_error_code, merchant_error_note
         provider_code = (self.order.response_payload or {}).get("merchant_error_code")
         provider_code = merchant_error_code({"error_code": provider_code}) if provider_code is not None else ""
         delta = self.order.plan.get_duration_delta()
@@ -96,6 +96,7 @@ class ClickCardCheckoutView(View):
         return render(request, "payments/click_card_checkout.html", {
             "order": self.order, "checkout": checkout, "error": error,
             "provider_code": provider_code,
+            "provider_note": merchant_error_note({"error_note": (self.order.response_payload or {}).get("merchant_error_note")}),
             "duration_label": duration_label,
             "sms_remaining": sms_remaining,
             "sms_countdown": f"{sms_remaining // 60:02}:{sms_remaining % 60:02}",

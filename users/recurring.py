@@ -26,6 +26,20 @@ def merchant_error_code(result):
     return code if re.fullmatch(r"-?\d{1,8}", code) else "unknown"
 
 
+def merchant_error_note(result, sensitive_values=()):
+    """Keep the provider's explanation, stripping credentials and card data."""
+    result = result or {}
+    note = str(result.get("error_note") or "")[:1000]
+    private = [*sensitive_values, settings.CLICK_SECRET_KEY,
+               *(result.get(k) for k in ("card_token", "card_number", "sms_code", "phone_number"))]
+    for value in private:
+        if value:
+            note = note.replace(str(value), "[hidden]")
+    note = re.sub(r"https?://\S+|[\w.+-]+@[\w.-]+", "[hidden]", note)
+    note = re.sub(r"[A-Za-z0-9_-]{24,}|(?:\d[ -]*){12,}|\d{4,}", "[hidden]", note)
+    return " ".join(note.split())[:240]
+
+
 class RenewalError(Exception):
     pass
 
@@ -74,7 +88,9 @@ def merchant_request(path, payload):
         if not isinstance(result, dict) or "error_code" not in result:
             raise ValueError("Invalid merchant response")
         if str(result.get("error_code")) != "0":
-            logger.warning("Click Merchant API rejected stage=%s code=%s", path, merchant_error_code(result))
+            logger.warning("Click Merchant API rejected stage=%s code=%s note=%s", path,
+                           merchant_error_code(result), merchant_error_note(result, [payload.get(k) for k in
+                           ("card_token", "card_number", "sms_code")]))
         return result
     except Exception as exc:
         logger.warning("Click Merchant API response unavailable stage=%s exception=%s", path, type(exc).__name__)
