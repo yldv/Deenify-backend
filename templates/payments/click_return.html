@@ -27,6 +27,7 @@
   <div class="icon">✅</div>
   <h1>To'lov tasdiqlandi</h1>
   <p>Premium obunangiz faollashtirildi.</p>
+  {% if renewal_url %}<a class="button" href="{{ renewal_url }}">Avtouzaytirishni yoqish</a>{% endif %}
   {% elif payment_status == "pending" or payment_status == "created" %}
   <div class="icon">⏳</div>
   <h1>To'lovni kutmoqdamiz</h1>

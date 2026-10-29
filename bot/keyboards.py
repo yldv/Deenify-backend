@@ -69,12 +69,11 @@ def home_keyboard(language: str, is_premium: bool = False):
 
 
 def settings_keyboard(language: str, is_premium: bool = False):
-    # "Cancel subscription" only makes sense for users who actually have premium.
+    # Renewal can remain enabled while an expired payment is being reconciled.
     first_row = [KeyboardButton(text=get_text(language, "settings_subscription_status"))]
-    if is_premium:
-        first_row.append(
-            KeyboardButton(text=get_text(language, "settings_cancel_subscription"))
-        )
+    first_row.append(
+        KeyboardButton(text=get_text(language, "settings_cancel_subscription"))
+    )
     return ReplyKeyboardMarkup(
         keyboard=[
             first_row,

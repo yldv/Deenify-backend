@@ -153,6 +153,7 @@ def get_user_subscription_snapshot(user):
         "starts_at": None,
         "expires_at": None,
         "pending_order_status": "",
+        "auto_renew": user.click_renewal.enabled if hasattr(user, "click_renewal") else False,
     }
 
     if user.is_blocked:
@@ -594,6 +595,7 @@ def _notify_payment_success_safe(order):
 
 def after_order_paid(order):
     """Run side effects after an order is marked paid: referral reward + notification."""
+    from .recurring import sync_renewal
     try:
         grant_referral_reward(order)
     except Exception:  # noqa: BLE001
@@ -601,24 +603,23 @@ def after_order_paid(order):
             "Referral reward failed order=%s",
             getattr(order, "merchant_order_id", None) or getattr(order, "pk", None),
         )
+    sync_renewal(order)
     _notify_payment_success_safe(order)
 
 
 def cancel_subscription(user) -> dict:
-    """End the current premium period.
-
-    Click charges once per purchase, so there is nothing to unbind or refund.
-    Cancelling disables the active subscription right away: the user no longer
-    gets premium features, and no automatic renewal exists to stop.
-    """
+    """Stop future charges, preserving the already purchased coverage."""
+    from .models import ClickRenewal
+    had_renewal = ClickRenewal.objects.filter(user=user, enabled=True).exists()
+    ClickRenewal.objects.filter(user=user).update(
+        enabled=False, verified=False, token_encrypted="", next_charge_at=None,
+        updated_at=timezone.now(),
+    )
     subscription = get_active_premium_subscription(user)
     if not subscription:
-        return {"ok": True, "had_premium": False, "expires_at": None}
+        return {"ok": True, "had_premium": False, "had_renewal": had_renewal, "expires_at": None}
     expires_at = subscription.expires_at
-    UserPremiumSubscription.objects.filter(pk=subscription.pk).update(
-        is_active=False, updated_at=timezone.now()
-    )
-    return {"ok": True, "had_premium": True, "expires_at": expires_at}
+    return {"ok": True, "had_premium": True, "had_renewal": had_renewal, "expires_at": expires_at}
 
 
 # ---------------------------------------------------------------------------
@@ -745,7 +746,7 @@ def cleanup_stale_click_orders(*, days=None, all_unpaid=False, dry_run=False):
         ClickOrder.Status.CANCELED,
         ClickOrder.Status.EXPIRED,
     )
-    qs = ClickOrder.objects.filter(status__in=unpaid_statuses)
+    qs = ClickOrder.objects.filter(status__in=unpaid_statuses, clickrenewalattempt__isnull=True)
     if not all_unpaid:
         cutoff = timezone.now() - timedelta(days=retention_days)
         qs = qs.filter(created_at__lt=cutoff)

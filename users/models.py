@@ -439,6 +439,32 @@ class ClickOrder(TimeStampedModel):
         )
 
 
+class ClickRenewal(TimeStampedModel):
+    """One explicitly authorized recurring mandate per user (no card PAN/SMS)."""
+
+    user = models.OneToOneField(TelegramUser, on_delete=models.CASCADE, related_name="click_renewal")
+    plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT)
+    token_encrypted = models.TextField(blank=True)
+    enabled = models.BooleanField(default=False)
+    verified = models.BooleanField(default=False)
+    verify_attempts = models.PositiveSmallIntegerField(default=0)
+    consent_at = models.DateTimeField(null=True, blank=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    period = models.CharField(max_length=20)
+    duration = models.PositiveIntegerField()
+    next_charge_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+
+class ClickRenewalAttempt(TimeStampedModel):
+    renewal = models.ForeignKey(ClickRenewal, on_delete=models.PROTECT)
+    due_at = models.DateTimeField()
+    order = models.OneToOneField(ClickOrder, on_delete=models.PROTECT)
+    state = models.CharField(max_length=20, default="processing")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("renewal", "due_at"), name="unique_click_renewal_period")]
+
+
 class ClickTransaction(TimeStampedModel):
     class Status(models.TextChoices):
         INITIATED = "initiated", _("Initiated")

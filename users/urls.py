@@ -1,4 +1,5 @@
 from django.urls import path
+from .recurring_views import ClickRenewalSetupView
 
 from .views import (
     AdminStatisticsView,
@@ -23,6 +24,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path("api/v1/payments/click/renewal/<str:order_id>/", ClickRenewalSetupView.as_view(), name="click-renewal-setup"),
     path("api/v1/bot/users/", BotUserView.as_view(), name="bot-user-upsert"),
     path(
         "api/v1/bot/users/<int:telegram_id>/",

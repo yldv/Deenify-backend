@@ -24,13 +24,14 @@ def build_subscription_summary(*, language: str, user: dict, free_limit: int = 1
         until_raw = subscription.get("expires_at") or user.get("premium_until")
         until = "∞" if not until_raw else _format_dt(until_raw, language)
         starts_raw = subscription.get("starts_at") or user.get("premium_starts_at")
-        return get_text(
+        text = get_text(
             language,
             "settings_subscription_active",
             plan=subscription.get("plan") or user.get("premium_plan") or "Premium",
             starts=_format_dt(starts_raw, language),
             until=until,
         )
+        return text + "\n" + get_text(language, "auto_renew_on" if subscription.get("auto_renew") else "auto_renew_off")
 
     if status == "pending_payment":
         return get_text(

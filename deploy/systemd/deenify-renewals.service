@@ -1,0 +1,11 @@
+[Unit]
+Description=Deenify consented Click subscription renewals
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=deenify
+Group=deenify
+WorkingDirectory=/var/www/deenify
+EnvironmentFile=/var/www/deenify/.env
+ExecStart=/var/www/deenify/.venv/bin/python manage.py renew_click_subscriptions

@@ -244,6 +244,9 @@ CLICK_BOT_URL = os.environ.get(
 ).strip()
 # Interface language of the Click payment page (uz|ru|en).
 CLICK_LANG = os.environ.get('CLICK_LANG', 'uz').strip() or 'uz'
+CLICK_RENEWALS_ENABLED = os.environ.get('CLICK_RENEWALS_ENABLED', 'False') == 'True'
+# Dedicated Fernet key; keep stable and back it up. Never reuse the Click secret.
+CLICK_TOKEN_ENCRYPTION_KEY = os.environ.get('CLICK_TOKEN_ENCRYPTION_KEY', '').strip()
 # Referral bonus days granted to the inviter on the invited user's FIRST payment.
 CLICK_REFERRAL_BONUS_DAYS_MONTHLY = int(
     os.environ.get('CLICK_REFERRAL_BONUS_DAYS_MONTHLY', '10')

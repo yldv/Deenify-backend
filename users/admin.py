@@ -4,12 +4,41 @@ from django.utils import timezone
 from .models import (
     ActiveTelegramUser,
     ClickOrder,
+    ClickRenewal,
+    ClickRenewalAttempt,
     ClickTransaction,
     Feedback,
     SubscriptionPlan,
     TelegramUser,
     UserPremiumSubscription,
 )
+
+
+class RenewalAuditAdmin(admin.ModelAdmin):
+    """Audit metadata only: never expose encrypted payment tokens in admin."""
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ClickRenewal)
+class ClickRenewalAdmin(RenewalAuditAdmin):
+    list_display = ("id", "user", "plan", "enabled", "verified", "next_charge_at")
+    list_filter = ("enabled", "verified")
+    fields = ("user", "plan", "amount", "period", "duration", "enabled", "verified", "consent_at", "next_charge_at")
+
+
+@admin.register(ClickRenewalAttempt)
+class ClickRenewalAttemptAdmin(RenewalAuditAdmin):
+    list_display = ("id", "renewal", "order", "due_at", "state", "created_at")
+    list_filter = ("state",)
+    fields = ("renewal", "order", "due_at", "state", "created_at", "updated_at")
 
 
 class TelegramUserAdminBase(admin.ModelAdmin):

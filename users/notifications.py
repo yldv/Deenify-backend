@@ -180,9 +180,15 @@ def notify_payment_success(order) -> None:
     subscription = getattr(order, "premium_subscription", None)
     plan_name = _localized_plan_name(order.plan, language)
     until = _format_until(subscription=subscription, language=language)
+    from .recurring import setup_url
+    renewal_url = setup_url(order)
+    text = _success_text(language=language, plan_name=plan_name, until=until)
+    if renewal_url:
+        from bot.texts import get_text
+        text += f'\n\n<a href="{renewal_url}">{get_text(language, "enable_auto_renewal")}</a>'
     send_telegram_message(
         chat_id=chat_id,
-        text=_success_text(language=language, plan_name=plan_name, until=until),
+        text=text,
         reply_markup=_home_menu_markup(language, is_premium=True),
     )
 

@@ -13,6 +13,7 @@ from core.api import get_requested_language, get_telegram_user, user_not_found_r
 from core.bot_api import BotProtectedAPIView
 
 from .models import ClickOrder, Feedback, SubscriptionPlan, TelegramUser
+from .recurring import setup_url
 from .serializers import (
     ClickOrderCreateResponseSerializer,
     ClickOrderCreateSerializer,
@@ -172,8 +173,7 @@ class BotUserReferralView(BotProtectedAPIView):
 
 @extend_schema(tags=["bot-users"], responses={200: OpenApiTypes.OBJECT})
 class BotUserCancelSubscriptionView(BotProtectedAPIView):
-    """Close the current premium period. Click charges per purchase, so there is
-    no stored card or auto-renewal to switch off."""
+    """Stop auto-renewal while preserving the purchased premium period."""
 
     def post(self, request, telegram_id):
         user = get_telegram_user(telegram_id)
@@ -187,6 +187,7 @@ class BotUserCancelSubscriptionView(BotProtectedAPIView):
             {
                 "ok": result.get("ok", True),
                 "had_premium": bool(result.get("had_premium")),
+                "had_renewal": bool(result.get("had_renewal")),
                 "expires_at": expires_at.strftime("%d.%m.%Y") if expires_at else "",
             },
             status=status.HTTP_200_OK,
@@ -365,7 +366,7 @@ class ClickOrderCheckoutView(APIView):
             return render(
                 request,
                 RETURN_TEMPLATE,
-                {"payment_status": "paid", "bot_url": _bot_url()},
+                {"payment_status": "paid", "bot_url": _bot_url(), "renewal_url": setup_url(order)},
             )
         try:
             return _render_checkout(request, order)
@@ -418,6 +419,7 @@ class ClickReturnView(APIView):
         response = render(request, RETURN_TEMPLATE, {
             "bot_url": _bot_url(),
             "payment_status": order.status if order else "unknown",
+            "renewal_url": setup_url(order),
         })
         response["Cache-Control"] = "no-store"
         return response

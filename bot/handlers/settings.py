@@ -152,7 +152,7 @@ async def settings_cancel_subscription(message: Message, state: FSMContext, api_
         await message.answer(get_text(language, "error"), reply_markup=settings_keyboard(language))
         return
 
-    if not result.get("had_premium"):
+    if not result.get("had_premium") and not result.get("had_renewal"):
         await message.answer(
             get_text(language, "cancel_no_subscription"),
             reply_markup=settings_keyboard(language),

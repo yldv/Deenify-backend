@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>Deenify — Avtouzaytirish</title>
+<style>
+body {font:16px system-ui;background:#f4f7f4;color:#14251a;margin:0;padding:24px}
+main {max-width:420px;margin:30px auto;background:white;padding:28px;border-radius:20px}
+label {display:block;margin:16px 0} input:not([type=checkbox]),button {box-sizing:border-box;width:100%;padding:14px;margin-top:6px;border:1px solid #cbd6ce;border-radius:10px;font:inherit}
+button {background:#159947;color:white;cursor:pointer} p {line-height:1.6}.error {color:#a12525}
+</style></head><body><main><h1>Avtouzaytirish</h1>
+{% if unavailable %}<p>Bu havola orqali avtouzaytirishni yoqib bo'lmaydi. Botdan amaldagi obunangizni tekshiring.</p>
+{% elif renewal.enabled %}<p>✅ Avtouzaytirish yoqildi.</p><p>Keyingi to'lov: {{ renewal.next_charge_at|date:"d.m.Y H:i" }}. Summa: {{ renewal.amount }} UZS.</p><p>Botdagi Sozlamalar → Obunani bekor qilish orqali o'chirishingiz mumkin. To'langan muddat saqlanadi.</p>
+{% else %}
+<p>{{ order.plan.name }} — {{ order.amount }} UZS, har {{ order.plan.duration }} {{ order.plan.get_period_display }}.</p>
+<p>Obuna muddati tugaganda shu summa bog'langan kartadan avtomatik yechiladi. Botdagi Sozlamalar orqali istalgan payt bekor qilishingiz mumkin.</p>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+{% if verify %}
+<form method="post" autocomplete="off">{% csrf_token %}<input type="hidden" name="action" value="verify">
+<label>Click yuborgan SMS kodi<input name="sms_code" inputmode="numeric" pattern="[0-9]{4,8}" required autocomplete="one-time-code"></label>
+<button type="submit">Tasdiqlash va avtouzaytirishni yoqish</button></form>
+<details><summary>Boshqa kartani bog'lash</summary>
+{% endif %}
+<form method="post" autocomplete="off">{% csrf_token %}<input type="hidden" name="action" value="bind">
+<label>Karta raqami<input name="card_number" inputmode="numeric" pattern="[0-9]{16,19}" maxlength="19" required></label>
+<label>Amal qilish muddati (MMYY)<input name="expiry" inputmode="numeric" pattern="(0[1-9]|1[0-2])[0-9]{2}" maxlength="4" placeholder="MMYY" required></label>
+<label><input type="checkbox" name="consent" required> Kartamni bog'lashga va har davr uchun {{ order.amount }} UZS avtomatik yechilishiga roziman.</label>
+<button type="submit">SMS kodini olish</button></form>
+{% if verify %}</details>{% endif %}
+{% endif %}</main></body></html>
