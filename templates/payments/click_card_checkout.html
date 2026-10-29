@@ -4,32 +4,66 @@
 {% if waiting and not order.is_paid %}<meta http-equiv="refresh" content="5">{% endif %}
 <title>Deenify — Karta orqali to'lash</title>
 <style>
-body {font:16px system-ui;background:#f4f7f4;color:#14251a;margin:0;padding:24px}
-main {max-width:420px;margin:30px auto;background:white;padding:28px;border-radius:20px}
-label {display:block;margin:16px 0} input:not([type=checkbox]),button {box-sizing:border-box;width:100%;padding:14px;margin-top:6px;border:1px solid #cbd6ce;border-radius:10px;font:inherit}
-button {background:#159947;color:white;cursor:pointer} p {line-height:1.6}.error {color:#a12525} a {color:#158543} .amount {font-size:26px;font-weight:700}
-</style></head><body><main>
+* {box-sizing:border-box}
+:root {color-scheme:light;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17372c;background:#f3f7f5}
+body {margin:0;min-height:100vh;padding:36px 20px;display:grid;place-items:center}
+.shell {width:100%;max-width:460px}
+.brand {display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:24px;font-size:23px;font-weight:750;letter-spacing:-.8px}
+.brand-mark {width:30px;height:30px;display:grid;place-items:center;border-radius:10px;background:#168451;color:#fff;font-size:20px}
+main {padding:30px;border:1px solid #e6ede9;border-radius:24px;background:#fff;box-shadow:0 16px 48px #234a3410}
+.steps {display:flex;align-items:center;gap:10px;margin-bottom:26px;color:#829188;font-size:12px;font-weight:600}
+.step {display:flex;align-items:center;gap:6px;white-space:nowrap}
+.step b {width:22px;height:22px;display:grid;place-items:center;border-radius:50%;background:#f0f4f2;font-size:11px}
+.step.active {color:#13764a}.step.active b {background:#e4f4eb}.line {flex:1;height:1px;background:#e6ede9}
+h1 {margin:0 0 8px;font-size:25px;line-height:1.25;letter-spacing:-.8px}
+.intro {margin:0 0 22px;color:#718277;font-size:14px;line-height:1.6}
+.summary {padding:18px 20px;margin-bottom:24px;border:1px solid #e0eee5;border-radius:16px;background:#f4faf6}
+.plan {margin-bottom:8px;color:#668071;font-size:13px}
+.amount {font-size:30px;font-weight:750;letter-spacing:-1px;font-variant-numeric:tabular-nums}
+.amount small {margin-left:5px;font-size:14px;font-weight:600;letter-spacing:0;color:#718577}
+label {display:block;margin:19px 0 0;font-size:13px;font-weight:600}
+input {width:100%;margin-top:8px;padding:15px;border:1px solid #dce5df;border-radius:12px;outline:none;font:inherit;font-size:17px;font-weight:500;color:#17372c;background:#fbfcfb;transition:border-color .15s,box-shadow .15s}
+input::placeholder {color:#97a69c;font-weight:400}input:focus {border-color:#25965f;box-shadow:0 0 0 3px #16845114;background:#fff}
+input[name=card_number],input[name=sms_code] {letter-spacing:2px}input[name=expiry] {max-width:142px}
+.hint {margin:7px 0 0;color:#7c8d82;font-size:12px}
+button {width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:24px;padding:16px 18px;border:0;border-radius:12px;background:#168451;color:#fff;font:inherit;font-size:15px;font-weight:650;cursor:pointer;transition:background .15s}
+button:hover {background:#106c40}button:focus-visible,a:focus-visible {outline:3px solid #7ac99e;outline-offset:3px}
+.terms {margin:14px 0 0;color:#728477;font-size:11.5px;line-height:1.65}.terms strong {color:#4c6b57;font-weight:500}
+.error {margin:16px 0;padding:12px;border-radius:10px;background:#fff3f1;color:#ab3d32;font-size:13px;line-height:1.5}
+.back {display:block;width:fit-content;margin:22px auto 0;color:#647c6d;font-size:13px;text-decoration:none}.back:hover {color:#168451}
+.footer {margin-top:20px;text-align:center;color:#7d9083;font-size:11px}
+.result {padding:10px 0;text-align:center}.result p {color:#728578;font-size:14px;line-height:1.7}
+@media(max-width:480px) {body {padding:22px 16px}main {padding:24px;border-radius:20px}h1 {font-size:23px}.brand {margin-bottom:20px}}
+@media(max-width:360px) {.steps {gap:6px;font-size:11px}.step {gap:4px}}
+@media(prefers-reduced-motion:reduce) {* {transition:none!important}}
+</style></head><body><div class="shell"><div class="brand"><span class="brand-mark" aria-hidden="true">d</span>deenify</div><main>
 {% if order.is_paid %}
-<h1>✅ To'lov tasdiqlandi</h1><p>Premium obunangiz faollashtirildi.</p>
+<div class="result"><h1>✅ To'lov tasdiqlandi</h1><p>Premium obunangiz faollashtirildi.</p>
 {% if checkout.auto_renew_requested %}<p>Avtouzaytirish uchun kartangiz ham bog'landi. Uni botdagi Sozlamalar → Obunani bekor qilish orqali o'chirishingiz mumkin.</p>{% endif %}
+</div>
 {% elif waiting %}
-<h1>To'lov natijasi kutilmoqda</h1><p>Click javobini kutmoqdamiz. Sahifa avtomatik yangilanadi. Qayta to'lov qilmang.</p>
+<div class="result" role="status"><h1>To'lov tekshirilmoqda</h1><p>Click javobini kutmoqdamiz. Sahifa avtomatik yangilanadi. Qayta to'lov qilmang.</p></div>
 {% elif checkout.state == "failed" or order.status == "failed" %}
-<h1>To'lov amalga oshmadi</h1><p>Botdan yangi to'lov havolasini oching.</p>
+<div class="result"><h1>To'lov amalga oshmadi</h1><p>Botdan yangi to'lov havolasini oching.</p></div>
 {% else %}
-<h1>Karta orqali to'lash</h1><p>{{ order.plan.name }}</p><div class="amount">{{ order.amount }} UZS</div>
-<p>Keyingi to'lov: har {{ order.plan.duration }} {{ order.plan.get_period_display }} uchun {{ order.amount }} UZS. Avtouzaytirishni botdagi Sozlamalar orqali bekor qilishingiz mumkin.</p>
+<div class="steps" aria-label="To'lov bosqichlari"><span class="step {% if not verify %}active{% endif %}"><b>1</b>Karta ma'lumotlari</span><span class="line"></span><span class="step {% if verify %}active{% endif %}"><b>2</b>Tasdiqlash</span></div>
+<h1>{% if verify %}To'lovni tasdiqlang{% else %}Karta orqali to'lash{% endif %}</h1>
+<p class="intro">{% if verify %}Kartangizga bog'langan raqamga yuborilgan SMS kodini kiriting.{% else %}Premium imkoniyatlarini faollashtiring.{% endif %}</p>
+<div class="summary"><div class="plan">{{ order.plan.name }}</div><div class="amount">{{ amount_display }}<small>UZS</small></div></div>
 {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
 {% if verify %}
 <form method="post" autocomplete="off">{% csrf_token %}<input type="hidden" name="action" value="verify">
-<label>Click yuborgan SMS kodi<input name="sms_code" inputmode="numeric" pattern="[0-9]{4,8}" required autocomplete="one-time-code"></label>
-<button type="submit">Tasdiqlash va {{ order.amount }} UZS to'lash</button></form>
+<label>SMS kodi<input name="sms_code" inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" placeholder="SMS kodi" required autocomplete="one-time-code" autofocus></label>
+<button type="submit"><span>{{ amount_display }} UZS to'lash</span><span aria-hidden="true">→</span></button></form>
 {% else %}
 <form method="post" autocomplete="off">{% csrf_token %}<input type="hidden" name="action" value="bind">
-<label>Karta raqami<input name="card_number" inputmode="numeric" pattern="[0-9]{16,19}" maxlength="19" required></label>
-<label>Amal qilish muddati (MMYY)<input name="expiry" inputmode="numeric" pattern="(0[1-9]|1[0-2])[0-9]{2}" maxlength="4" placeholder="MMYY" required></label>
-<label><input type="checkbox" name="consent" required> {{ order.amount }} UZS to'lashga, kartamni bog'lashga va obuna muddati tugaganda shu summa avtomatik yechilishiga roziman.</label>
-<button type="submit">SMS kodini olish</button></form>
-{% endif %}{% endif %}
-<p><a href="{{ bot_url }}">Botga qaytish</a></p>
-</main></body></html>
+<input type="hidden" name="consent" value="true">
+<label>Karta raqami<input name="card_number" inputmode="numeric" pattern="[0-9]{16,19}" minlength="16" maxlength="19" placeholder="0000 0000 0000 0000" required></label>
+<label>Amal qilish muddati<input name="expiry" inputmode="numeric" pattern="(0[1-9]|1[0-2])[0-9]{2}" maxlength="4" placeholder="MMYY" required></label>
+<p class="hint">Masalan: 0729 — iyul, 2029</p>
+<button type="submit"><span>SMS kodini olish</span><span aria-hidden="true">→</span></button></form>
+{% endif %}
+<p class="terms">Davom etish orqali avtouzaytirishga rozilik bildirasiz: <strong>har {{ order.plan.duration }} {{ order.plan.get_period_display }} uchun {{ amount_display }} UZS</strong>. Botdagi Sozlamalarda istalgan payt bekor qilish mumkin.</p>
+{% endif %}
+<a class="back" href="{{ bot_url }}">← Botga qaytish</a>
+</main><div class="footer">To'lov Click orqali amalga oshiriladi</div></div></body></html>

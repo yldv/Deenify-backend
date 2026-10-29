@@ -36,10 +36,13 @@ class CardCheckoutTests(TestCase):
                            {"error_code": 0}, {"error_code": 0, "payment_id": 100}]
         client = Client(enforce_csrf_checks=True)
         url = reverse("click-card-checkout", args=[self.order.order_id])
-        self.assertEqual(client.get(url).status_code, 200)
+        page = client.get(url)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, '<input type="hidden" name="consent" value="true">', html=True)
+        self.assertNotContains(page, 'type="checkbox"')
         csrf = client.cookies["csrftoken"].value
         response = client.post(url, {"action": "bind", "card_number": "8600000000000000",
-                                     "expiry": "1228", "consent": "on"}, HTTP_X_CSRFTOKEN=csrf)
+                                     "expiry": "1228", "consent": "true"}, HTTP_X_CSRFTOKEN=csrf)
         self.assertEqual(response.status_code, 302)
         self.assertFalse(ClickRenewal.objects.exists())
         self.assertNotContains(client.get(url), "private-card-token")
