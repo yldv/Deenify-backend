@@ -85,7 +85,7 @@ def verify_and_pay(order, sms_code):
     try:
         result = merchant_request("card_token/payment", {
             "card_token": token, "amount": float(order.amount),
-            "merchant_trans_id": order.merchant_order_id,
+            "transaction_parameter": order.merchant_order_id,
         })
     except RenewalError:
         result = None

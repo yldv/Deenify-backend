@@ -1,6 +1,6 @@
 """Click Merchant API card tokens and durable, at-most-once renewal attempts.
 
-Protocol reference: click-llc/click-integration-php, Payments/BasePayments.php.
+Protocol reference: https://docs.click.uz/merchant-api/requests
 Never retry an uncertain debit automatically: it may already have succeeded.
 """
 import hashlib
@@ -207,7 +207,7 @@ def charge_due(renewal_id):
     try:
         result = merchant_request("card_token/payment", {
             "card_token": token, "amount": float(order.amount),
-            "merchant_trans_id": order.merchant_order_id,
+            "transaction_parameter": order.merchant_order_id,
         })
     except RenewalError:
         ClickRenewalAttempt.objects.filter(pk=attempt.pk, state="processing").update(state="uncertain")

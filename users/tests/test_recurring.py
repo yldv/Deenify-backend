@@ -76,6 +76,11 @@ class RenewalTests(TestCase):
                 self.assertGreater(renewal.next_charge_at, timezone.now())
                 self.assertEqual(charge_due(renewal.pk), "skipped")
         self.assertEqual(api.call_count, 4)
+        for call in api.call_args_list:
+            path, body = call.args
+            self.assertEqual(path, "card_token/payment")
+            self.assertTrue(ClickOrder.objects.filter(merchant_order_id=body["transaction_parameter"]).exists())
+            self.assertNotIn("merchant_trans_id", body)
 
     @patch("users.recurring.merchant_request", side_effect=RenewalError("timeout"))
     def test_timeout_cannot_double_charge(self, api):

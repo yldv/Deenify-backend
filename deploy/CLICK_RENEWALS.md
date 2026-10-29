@@ -69,5 +69,7 @@ The isolated test settings use an in-memory database and mock Click debits.
 PostgreSQL row-lock behavior and live merchant permissions still require
 production/staging verification.
 
-Protocol reference: https://github.com/click-llc/click-integration-php
-(`click/models/Payments.php` and `BasePayments.php`).
+Current protocol reference: https://docs.click.uz/merchant-api/requests
+Card-token payments require `transaction_parameter` for the local order ID.
+The `merchant_trans_id` field is used by invoices and SHOP callbacks, not by
+the current card-token payment request. Older SDK examples differ here.

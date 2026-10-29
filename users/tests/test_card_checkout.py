@@ -59,6 +59,10 @@ class CardCheckoutTests(TestCase):
         self.assertContains(response, "To'lov tasdiqlandi")
         self.assertNotContains(response, "private-card-token")
         self.assertEqual(api.call_count, 3)
+        payment_path, payment_body = api.call_args.args
+        self.assertEqual(payment_path, "card_token/payment")
+        self.assertEqual(payment_body["transaction_parameter"], self.order.merchant_order_id)
+        self.assertNotIn("merchant_trans_id", payment_body)
         # Reloading and resending the confirmation must not issue another debit.
         self.assertEqual(verify_and_pay(self.order, "12345"), "paid")
         self.assertEqual(api.call_count, 3)
