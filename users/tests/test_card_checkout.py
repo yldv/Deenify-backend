@@ -41,9 +41,11 @@ class CardCheckoutTests(TestCase):
         self.assertContains(page, '<input type="hidden" name="consent" value="true">', html=True)
         self.assertNotContains(page, 'type="checkbox"')
         csrf = client.cookies["csrftoken"].value
-        response = client.post(url, {"action": "bind", "card_number": "8600000000000000",
-                                     "expiry": "1228", "consent": "true"}, HTTP_X_CSRFTOKEN=csrf)
+        response = client.post(url, {"action": "bind", "card_number": "8600 0000 0000 0000",
+                                     "expiry": "12/28", "consent": "true"}, HTTP_X_CSRFTOKEN=csrf)
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(api.call_args.args[1]["card_number"], "8600000000000000")
+        self.assertEqual(api.call_args.args[1]["expire_date"], "1228")
         self.assertFalse(ClickRenewal.objects.exists())
         self.assertNotContains(client.get(url), "private-card-token")
         response = client.post(url, {"action": "verify", "sms_code": "12345"}, HTTP_X_CSRFTOKEN=csrf)
@@ -170,6 +172,24 @@ class CardCheckoutTests(TestCase):
         with self.assertRaises(RenewalError):
             verify_and_pay(self.order, "12345")
         api.assert_not_called()
+
+    @patch("users.card_checkout.merchant_request", return_value={"error_code": 0, "card_token": "replacement-token"})
+    def test_sms_reentry_requests_a_new_code_without_charging(self, api, notify):
+        checkout = self.bound()
+        checkout.consent_at = timezone.now() - timedelta(seconds=61)
+        checkout.save()
+        url = reverse("click-card-checkout", args=[self.order.order_id])
+        self.assertContains(self.client.get(url), 'name="sms_code"')
+        response = self.client.get(url + "?card=1")
+        self.assertContains(response, 'name="card_number"')
+        self.assertNotContains(response, 'name="sms_code"')
+        self.assertEqual(self.client.post(url + "?card=1", {
+            "action": "bind", "card_number": "8600 0000 0000 0000", "expiry": "12/28", "consent": "true",
+        }).status_code, 302)
+        self.assertEqual(api.call_args.args[0], "card_token/request")
+        api.assert_called_once()
+        self.order.refresh_from_db()
+        self.assertFalse(self.order.is_paid)
 
     @patch("users.card_checkout.merchant_request", return_value={"error_code": 0, "card_token": "private-token"})
     def test_https_form_origin_is_preserved_and_csrf_stays_enforced(self, api, notify):

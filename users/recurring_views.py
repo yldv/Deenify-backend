@@ -1,3 +1,5 @@
+import re
+
 from django import forms
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
@@ -13,9 +15,21 @@ from .recurring import RenewalError, available, eligible_order, request_binding,
 
 
 class BindForm(forms.Form):
-    card_number = forms.RegexField(r"^[0-9]{16,19}$")
-    expiry = forms.RegexField(r"^(0[1-9]|1[0-2])[0-9]{2}$")
+    card_number = forms.CharField(max_length=32)
+    expiry = forms.CharField(max_length=7)
     consent = forms.BooleanField()
+
+    def clean_card_number(self):
+        value = re.sub(r"[\s-]", "", self.cleaned_data["card_number"])
+        if not re.fullmatch(r"[0-9]{16,19}", value):
+            raise forms.ValidationError("Karta raqamini tekshiring.")
+        return value
+
+    def clean_expiry(self):
+        value = self.cleaned_data["expiry"].replace("/", "").replace(" ", "")
+        if not re.fullmatch(r"(0[1-9]|1[0-2])[0-9]{2}", value):
+            raise forms.ValidationError("Karta muddatini tekshiring.")
+        return value
 
 
 class VerifyForm(forms.Form):
@@ -74,12 +88,20 @@ class ClickCardCheckoutView(View):
         from .recurring import merchant_error_code
         provider_code = (self.order.response_payload or {}).get("merchant_error_code")
         provider_code = merchant_error_code({"error_code": provider_code}) if provider_code is not None else ""
+        delta = self.order.plan.get_duration_delta()
+        duration_label = ""
+        if delta:
+            duration_label = f"{delta.days} kun" if delta.days else f"{int(delta.total_seconds() // 60)} daqiqa"
+        sms_remaining = max(0, 600 - int((timezone.now() - checkout.consent_at).total_seconds())) if checkout else 0
         return render(request, "payments/click_card_checkout.html", {
             "order": self.order, "checkout": checkout, "error": error,
             "provider_code": provider_code,
+            "duration_label": duration_label,
+            "sms_remaining": sms_remaining,
+            "sms_countdown": f"{sms_remaining // 60:02}:{sms_remaining % 60:02}",
             "amount_display": format(self.order.amount, ",.2f").rstrip("0").rstrip(".").replace(",", " "),
             "bot_url": settings.CLICK_BOT_URL,
-            "verify": bool(checkout and checkout.state == "awaiting_sms"),
+            "verify": bool(checkout and checkout.state == "awaiting_sms" and request.GET.get("card") != "1"),
             "waiting": bool(checkout and checkout.state in ("processing", "uncertain")),
         }, status=status)
 

@@ -20,7 +20,8 @@ form do not show that extra enrollment link.
 1. Confirm with Click that your service has Merchant API access and permanent
    card tokens (`temporary=0`) authorized for recurring subscription debits.
    SHOP API checkout alone does not provide reusable card tokens.
-2. Install updated requirements and run `python manage.py migrate`.
+2. Install updated requirements, run `python manage.py migrate`, and collect
+   the checkout CSS, JavaScript and logo with `python manage.py collectstatic --noinput`.
 3. Generate a dedicated key with
    `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
    Save it as `CLICK_TOKEN_ENCRYPTION_KEY` in the server's environment. Back up
