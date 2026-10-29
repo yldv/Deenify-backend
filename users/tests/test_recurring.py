@@ -137,6 +137,10 @@ class RenewalTests(TestCase):
         self.order.save()
         self.assertEqual(client.get(url).status_code, 403)
 
+    def test_legacy_enrollment_preserves_form_origin(self):
+        url = reverse("click-renewal-setup", args=[self.order.order_id])
+        self.assertContains(self.client.get(url, secure=True), '<meta name="referrer" content="same-origin">')
+
     def test_lifetime_and_expired_link_cannot_enroll(self):
         self.subscription.expires_at = None
         self.subscription.save()

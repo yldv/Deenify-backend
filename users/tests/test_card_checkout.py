@@ -156,3 +156,22 @@ class CardCheckoutTests(TestCase):
         with self.assertRaises(RenewalError):
             verify_and_pay(self.order, "12345")
         api.assert_not_called()
+
+    @patch("users.card_checkout.merchant_request", return_value={"error_code": 0, "card_token": "private-token"})
+    def test_https_form_origin_is_preserved_and_csrf_stays_enforced(self, api, notify):
+        client = Client(enforce_csrf_checks=True)
+        url = reverse("click-card-checkout", args=[self.order.order_id])
+        page = client.get(url, secure=True)
+        # no-referrer turns a browser's navigation-mode form POST Origin into
+        # null; same-origin keeps it and also avoids leaking order URLs off-site.
+        self.assertContains(page, '<meta name="referrer" content="same-origin">')
+        csrf = client.cookies["csrftoken"].value
+        data = {"action": "bind", "card_number": "8600000000000000", "expiry": "1228", "consent": "on"}
+        for origin in ("null", "https://attacker.example"):
+            response = client.post(url, data, secure=True, HTTP_ORIGIN=origin, HTTP_X_CSRFTOKEN=csrf)
+            self.assertEqual(response.status_code, 403)
+        self.assertEqual(client.post(url, data, secure=True, HTTP_ORIGIN="https://testserver").status_code, 403)
+        api.assert_not_called()
+        response = client.post(url, data, secure=True, HTTP_ORIGIN="https://testserver", HTTP_X_CSRFTOKEN=csrf)
+        self.assertEqual(response.status_code, 302)
+        api.assert_called_once()
