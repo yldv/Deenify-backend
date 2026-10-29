@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.http import HttpResponseNotFound
-from django.shortcuts import render
+from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone, translation
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -258,6 +259,9 @@ def _bot_url() -> str:
 
 
 def _render_checkout(request, order, *, status_code=200):
+    from .recurring import available
+    if available() and order.plan.get_duration_delta():
+        return redirect(reverse("click-card-checkout", kwargs={"order_id": order.order_id}))
     return render(
         request,
         CHECKOUT_TEMPLATE,

@@ -439,6 +439,20 @@ class ClickOrder(TimeStampedModel):
         )
 
 
+class ClickCardCheckout(TimeStampedModel):
+    """Order-scoped token binding and durable first-debit claim."""
+
+    order = models.OneToOneField(ClickOrder, on_delete=models.PROTECT, related_name="card_checkout")
+    token_encrypted = models.TextField(blank=True)
+    consent_at = models.DateTimeField()
+    period = models.CharField(max_length=20)
+    duration = models.PositiveIntegerField()
+    verify_attempts = models.PositiveSmallIntegerField(default=0)
+    verified = models.BooleanField(default=False)
+    auto_renew_requested = models.BooleanField(default=True)
+    state = models.CharField(max_length=20, default="awaiting_sms")
+
+
 class ClickRenewal(TimeStampedModel):
     """One explicitly authorized recurring mandate per user (no card PAN/SMS)."""
 

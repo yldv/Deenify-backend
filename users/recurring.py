@@ -39,6 +39,8 @@ def cipher():
 def setup_url(order):
     if not available() or not order or not eligible_order(order):
         return ""
+    if hasattr(order, "card_checkout"):
+        return ""
     from django.urls import reverse
     from .services import _public_api_base_url
     return _public_api_base_url() + reverse("click-renewal-setup", kwargs={"order_id": order.order_id})
@@ -141,6 +143,8 @@ def verify_binding(order, sms_code):
 
 def sync_renewal(order):
     """Move the next charge after a purchase, referral extension or renewal."""
+    from .card_checkout import activate_checkout_renewal
+    activate_checkout_renewal(order)
     subscription = UserPremiumSubscription.objects.filter(source_order=order, is_active=True).first()
     if not subscription:
         return

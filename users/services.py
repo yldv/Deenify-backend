@@ -607,10 +607,16 @@ def after_order_paid(order):
     _notify_payment_success_safe(order)
 
 
+@transaction.atomic
 def cancel_subscription(user) -> dict:
     """Stop future charges, preserving the already purchased coverage."""
     from .models import ClickRenewal
+    from .models import ClickCardCheckout
+    TelegramUser.objects.select_for_update().get(pk=user.pk)
     had_renewal = ClickRenewal.objects.filter(user=user, enabled=True).exists()
+    had_checkout = ClickCardCheckout.objects.filter(order__user=user, auto_renew_requested=True).exists()
+    had_renewal = had_renewal or had_checkout
+    ClickCardCheckout.objects.filter(order__user=user).update(auto_renew_requested=False)
     ClickRenewal.objects.filter(user=user).update(
         enabled=False, verified=False, token_encrypted="", next_charge_at=None,
         updated_at=timezone.now(),
@@ -746,7 +752,7 @@ def cleanup_stale_click_orders(*, days=None, all_unpaid=False, dry_run=False):
         ClickOrder.Status.CANCELED,
         ClickOrder.Status.EXPIRED,
     )
-    qs = ClickOrder.objects.filter(status__in=unpaid_statuses, clickrenewalattempt__isnull=True)
+    qs = ClickOrder.objects.filter(status__in=unpaid_statuses, clickrenewalattempt__isnull=True, card_checkout__isnull=True)
     if not all_unpaid:
         cutoff = timezone.now() - timedelta(days=retention_days)
         qs = qs.filter(created_at__lt=cutoff)

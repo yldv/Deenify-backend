@@ -4,6 +4,7 @@ from django.utils import timezone
 from .models import (
     ActiveTelegramUser,
     ClickOrder,
+    ClickCardCheckout,
     ClickRenewal,
     ClickRenewalAttempt,
     ClickTransaction,
@@ -39,6 +40,13 @@ class ClickRenewalAttemptAdmin(RenewalAuditAdmin):
     list_display = ("id", "renewal", "order", "due_at", "state", "created_at")
     list_filter = ("state",)
     fields = ("renewal", "order", "due_at", "state", "created_at", "updated_at")
+
+
+@admin.register(ClickCardCheckout)
+class ClickCardCheckoutAdmin(RenewalAuditAdmin):
+    list_display = ("id", "order", "state", "verified", "auto_renew_requested", "created_at")
+    list_filter = ("state", "auto_renew_requested")
+    fields = ("order", "state", "verified", "auto_renew_requested", "consent_at", "period", "duration", "created_at")
 
 
 class TelegramUserAdminBase(admin.ModelAdmin):

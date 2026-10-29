@@ -8,7 +8,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.debug import sensitive_post_parameters
 
-from .models import ClickOrder, ClickRenewal
+from .models import ClickCardCheckout, ClickOrder, ClickRenewal
 from .recurring import RenewalError, available, eligible_order, request_binding, verify_binding
 
 
@@ -58,3 +58,50 @@ class ClickRenewalSetupView(View):
         except RenewalError as exc:
             return self.page(request, error=str(exc), status=400)
         return redirect(reverse("click-renewal-setup", kwargs={"order_id": self.order.order_id}))
+
+
+@method_decorator(never_cache, name="dispatch")
+@method_decorator(csrf_protect, name="dispatch")
+@method_decorator(sensitive_post_parameters("card_number", "expiry", "sms_code"), name="dispatch")
+class ClickCardCheckoutView(View):
+    def page(self, request, *, error="", status=200):
+        from django.conf import settings
+        self.order.refresh_from_db()
+        if self.order.is_paid:
+            from .recurring import sync_renewal
+            sync_renewal(self.order)
+        checkout = ClickCardCheckout.objects.filter(order=self.order).first()
+        return render(request, "payments/click_card_checkout.html", {
+            "order": self.order, "checkout": checkout, "error": error,
+            "bot_url": settings.CLICK_BOT_URL,
+            "verify": bool(checkout and checkout.state == "awaiting_sms"),
+            "waiting": bool(checkout and checkout.state in ("processing", "uncertain")),
+        }, status=status)
+
+    def dispatch(self, request, order_id):
+        from .card_checkout import payable
+        self.order = get_object_or_404(ClickOrder.objects.select_related("user", "plan"), order_id=order_id)
+        if (not self.order.is_paid and not payable(self.order)
+                and not ClickCardCheckout.objects.filter(order=self.order).exists()):
+            return self.page(request, error="To'lov hozircha mavjud emas. Botdan yangi havola oling.", status=403)
+        return super().dispatch(request, order_id)
+
+    def get(self, request, order_id):
+        return self.page(request)
+
+    def post(self, request, order_id):
+        from .card_checkout import bind_checkout_card, verify_and_pay
+        try:
+            action = request.POST.get("action")
+            if action not in ("bind", "verify"):
+                raise RenewalError("Noto'g'ri amal.")
+            form = VerifyForm(request.POST) if action == "verify" else BindForm(request.POST)
+            if not form.is_valid():
+                raise RenewalError("Maydonlarni tekshiring va rozilikni tasdiqlang.")
+            if action == "verify":
+                verify_and_pay(self.order, **form.cleaned_data)
+            else:
+                bind_checkout_card(self.order, **form.cleaned_data)
+        except RenewalError as exc:
+            return self.page(request, error=str(exc), status=400)
+        return redirect(reverse("click-card-checkout", kwargs={"order_id": self.order.order_id}))

@@ -2,10 +2,18 @@
 
 All finite plan periods (day/week/month/year, including multi-unit durations)
 can renew. Lifetime plans never renew. Existing customers are **not** enrolled
-automatically. After paying, customers open the enrollment link on the return
-page or in the bot's success message, accept the displayed amount/frequency,
-and verify their card with Click's SMS code. Enrollment links expire 24 hours
-after payment. PAN, expiry and SMS are forwarded to Click, never saved.
+automatically. When renewals are enabled, the bot checkout opens a card form:
+customers enter their card, accept the displayed initial payment and renewal
+amount/frequency, and verify Click's SMS code. The first debit is submitted in
+the same flow; only a confirmed successful payment activates the saved mandate.
+No separate card-binding step is needed after payment. Card checkout links
+expire after 24 hours and SMS verification expires after 10 minutes.
+PAN, expiry and SMS are forwarded to Click, never saved. Lifetime purchases
+continue through the one-time Click checkout.
+
+The older post-payment enrollment page remains available for legacy purchases;
+its links expire 24 hours after payment. Orders paid with the integrated card
+form do not show that extra enrollment link.
 
 ## Production activation
 
@@ -39,7 +47,7 @@ after payment. PAN, expiry and SMS are forwarded to Click, never saved.
   purchase again and re-enroll. There are no automatic decline retries.
 - A network timeout/crash leaves a `processing` or `uncertain` attempt. It is
   **never resubmitted automatically**. Monitor these rows in the read-only
-  ClickRenewalAttempt admin (or with the Django ORM)
+  ClickRenewalAttempt admin (initial debits are in ClickCardCheckout), or with the Django ORM
   and reconcile the merchant order ID in the Click cabinet/support. A valid
   successful SHOP callback can confirm the order normally. Do not delete an
   uncertain attempt or create a replacement debit before confirming its outcome.
