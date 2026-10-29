@@ -5,6 +5,8 @@ Never retry an uncertain debit automatically: it may already have succeeded.
 """
 import hashlib
 import json
+import logging
+import re
 import time
 from urllib.request import Request, urlopen
 
@@ -14,6 +16,14 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import ClickOrder, ClickRenewal, ClickRenewalAttempt, UserPremiumSubscription
+
+logger = logging.getLogger(__name__)
+
+
+def merchant_error_code(result):
+    """Only an integer provider code is safe to log/display, never raw bodies."""
+    code = str((result or {}).get("error_code", ""))
+    return code if re.fullmatch(r"-?\d{1,8}", code) else "unknown"
 
 
 class RenewalError(Exception):
@@ -63,8 +73,11 @@ def merchant_request(path, payload):
             result = json.loads(response.read())
         if not isinstance(result, dict) or "error_code" not in result:
             raise ValueError("Invalid merchant response")
+        if str(result.get("error_code")) != "0":
+            logger.warning("Click Merchant API rejected stage=%s code=%s", path, merchant_error_code(result))
         return result
-    except Exception:
+    except Exception as exc:
+        logger.warning("Click Merchant API response unavailable stage=%s exception=%s", path, type(exc).__name__)
         # Do not expose request/response bodies, PAN, SMS or card tokens.
         raise RenewalError("Click javobi olinmadi. Keyinroq holatni tekshiring.") from None
 

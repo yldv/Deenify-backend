@@ -45,6 +45,7 @@ button:hover {background:#106c40}button:focus-visible,a:focus-visible {outline:3
 <div class="result" role="status"><h1>To'lov tekshirilmoqda</h1><p>Click javobini kutmoqdamiz. Sahifa avtomatik yangilanadi. Qayta to'lov qilmang.</p></div>
 {% elif checkout.state == "failed" or order.status == "failed" %}
 <div class="result"><h1>To'lov amalga oshmadi</h1><p>Botdan yangi to'lov havolasini oching.</p></div>
+{% if provider_code %}<p class="hint">Click xato kodi: {{ provider_code }}</p>{% endif %}
 {% else %}
 <div class="steps" aria-label="To'lov bosqichlari"><span class="step {% if not verify %}active{% endif %}"><b>1</b>Karta ma'lumotlari</span><span class="line"></span><span class="step {% if verify %}active{% endif %}"><b>2</b>Tasdiqlash</span></div>
 <h1>{% if verify %}To'lovni tasdiqlang{% else %}Karta orqali to'lash{% endif %}</h1>

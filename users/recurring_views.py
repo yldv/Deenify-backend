@@ -71,8 +71,12 @@ class ClickCardCheckoutView(View):
             from .recurring import sync_renewal
             sync_renewal(self.order)
         checkout = ClickCardCheckout.objects.filter(order=self.order).first()
+        from .recurring import merchant_error_code
+        provider_code = (self.order.response_payload or {}).get("merchant_error_code")
+        provider_code = merchant_error_code({"error_code": provider_code}) if provider_code is not None else ""
         return render(request, "payments/click_card_checkout.html", {
             "order": self.order, "checkout": checkout, "error": error,
+            "provider_code": provider_code,
             "amount_display": format(self.order.amount, ",.2f").rstrip("0").rstrip(".").replace(",", " "),
             "bot_url": settings.CLICK_BOT_URL,
             "verify": bool(checkout and checkout.state == "awaiting_sms"),

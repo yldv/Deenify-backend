@@ -5,7 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import ClickCardCheckout, ClickOrder, ClickRenewal, TelegramUser
-from .recurring import RenewalError, available, cipher, merchant_request
+from .recurring import RenewalError, available, cipher, merchant_error_code, merchant_request
 
 
 def payable(order):
@@ -103,7 +103,10 @@ def verify_and_pay(order, sms_code):
         ClickCardCheckout.objects.filter(pk=checkout.pk, state="processing").update(state=state)
         if state == "failed":
             order.status = ClickOrder.Status.FAILED
-            order.save(update_fields=("status", "updated_at"))
+            order.response_payload = {**(order.response_payload or {}),
+                                      "merchant_error_code": merchant_error_code(result),
+                                      "merchant_error_stage": "card_token/payment"}
+            order.save(update_fields=("status", "response_payload", "updated_at"))
         return state
 
 

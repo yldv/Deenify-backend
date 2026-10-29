@@ -96,11 +96,18 @@ class CardCheckoutTests(TestCase):
     @patch("users.card_checkout.merchant_request")
     def test_decline_does_not_enable_renewal(self, api, notify):
         self.bound()
-        api.side_effect = [{"error_code": 0}, {"error_code": -1}]
+        api.side_effect = [{"error_code": 0}, {"error_code": -42, "error_note": "private details", "card_token": "secret"}]
         self.assertEqual(verify_and_pay(self.order, "12345"), "failed")
         self.assertEqual(verify_and_pay(self.order, "12345"), "failed")
         self.assertEqual(api.call_count, 2)
         self.assertFalse(ClickRenewal.objects.exists())
+
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.response_payload["merchant_error_code"], "-42")
+        self.assertNotIn("secret", str(self.order.response_payload))
+        self.assertNotIn("private details", str(self.order.response_payload))
+        url = reverse("click-card-checkout", args=[self.order.order_id])
+        self.assertContains(self.client.get(url), "Click xato kodi: -42")
 
     def test_late_callback_enrolls_only_once(self, notify):
         checkout = self.bound()

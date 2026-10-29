@@ -43,10 +43,10 @@ class LanguageSyncMiddleware(BaseMiddleware):
                 current = sdata.get("language")
                 now = time.time()
                 last = sdata.get("language_synced_at", 0)
-                if current and (now - last) >= LANGUAGE_SYNC_INTERVAL:
+                if not current or (now - last) >= LANGUAGE_SYNC_INTERVAL:
                     backend_user = await api_client.get_user(telegram_id=user.id)
                     backend_lang = normalize_language(
-                        (backend_user or {}).get("language") or current
+                        (backend_user or {}).get("language") or current or "uz"
                     )
                     updates: dict[str, Any] = {"language_synced_at": now}
                     if backend_lang and backend_lang != current:

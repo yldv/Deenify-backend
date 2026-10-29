@@ -1,6 +1,7 @@
 import logging
 
 from aiogram import F, Router
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
@@ -64,8 +65,11 @@ async def buy_premium(message: Message, state: FSMContext, api_client):
     )
 
 
-@router.message(SettingsState.menu, F.text.in_(all_button_texts("settings_subscription_status")))
+@router.message(StateFilter(None, SettingsState.menu), F.text.in_(all_button_texts("settings_subscription_status")))
 async def show_subscription_status(message: Message, state: FSMContext, api_client):
+    # Telegram keeps reply keyboards after a restart; MemoryStorage does not
+    # keep their FSM state. Accept those buttons and restore the settings menu.
+    await state.set_state(SettingsState.menu)
     language = await get_language(state)
     try:
         user = await api_client.get_user(telegram_id=message.from_user.id)
@@ -139,8 +143,9 @@ async def settings_invite_friends(message: Message, state: FSMContext, api_clien
     )
 
 
-@router.message(SettingsState.menu, F.text.in_(all_button_texts("settings_cancel_subscription")))
+@router.message(StateFilter(None, SettingsState.menu), F.text.in_(all_button_texts("settings_cancel_subscription")))
 async def settings_cancel_subscription(message: Message, state: FSMContext, api_client):
+    await state.set_state(SettingsState.menu)
     language = await get_language(state)
     try:
         result = await api_client.cancel_subscription(telegram_id=message.from_user.id)
@@ -168,7 +173,7 @@ async def settings_cancel_subscription(message: Message, state: FSMContext, api_
     )
 
 
-@router.message(SettingsState.menu, F.text.in_(all_button_texts("change_language")))
+@router.message(StateFilter(None, SettingsState.menu), F.text.in_(all_button_texts("change_language")))
 async def settings_change_language(message: Message, state: FSMContext):
     language = await get_language(state)
     await state.update_data(return_to="settings")
@@ -179,7 +184,7 @@ async def settings_change_language(message: Message, state: FSMContext):
     )
 
 
-@router.message(SettingsState.menu, F.text.in_(all_button_texts("back")))
+@router.message(StateFilter(None, SettingsState.menu), F.text.in_(all_button_texts("back")))
 async def settings_back(message: Message, state: FSMContext, api_client):
     language = await preserve_language(state)
     is_premium = await resolve_is_premium(api_client, message.from_user.id)
