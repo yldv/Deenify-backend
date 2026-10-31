@@ -70,12 +70,18 @@ class ClickRenewalAttemptAdmin(RenewalAuditAdmin):
     list_filter = ("state",)
     fields = ("renewal", "order", "due_at", "state", "created_at", "updated_at")
 
+    def get_model_perms(self, request):
+        return {}
+
 
 @admin.register(ClickCardCheckout)
 class ClickCardCheckoutAdmin(RenewalAuditAdmin):
     list_display = ("id", "order", "state", "verified", "auto_renew_requested", "created_at")
     list_filter = ("state", "auto_renew_requested")
     fields = ("order", "state", "verified", "auto_renew_requested", "consent_at", "period", "duration", "created_at")
+
+    def get_model_perms(self, request):
+        return {}
 
 
 class TelegramUserAdminBase(admin.ModelAdmin):
