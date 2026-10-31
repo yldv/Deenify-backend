@@ -75,6 +75,9 @@ class CardCheckoutTests(TestCase):
         self.assertEqual(Client(enforce_csrf_checks=True).post(url, {}).status_code, 403)
         with self.assertRaises(RenewalError):
             bind_checkout_card(self.order, "8600000000000000", "1228", False)
+        for digits in (15, 17, 19):
+            with self.subTest(card_length=digits), self.assertRaises(RenewalError):
+                bind_checkout_card(self.order, "8" * digits, "1228", True)
         api.assert_not_called()
 
     @patch("users.card_checkout.merchant_request", return_value={"error_code": -1})
@@ -178,8 +181,6 @@ class CardCheckoutTests(TestCase):
     @patch("users.card_checkout.merchant_request", return_value={"error_code": 0, "card_token": "replacement-token"})
     def test_sms_reentry_requests_a_new_code_without_charging(self, api, notify):
         checkout = self.bound()
-        checkout.consent_at = timezone.now() - timedelta(seconds=61)
-        checkout.save()
         url = reverse("click-card-checkout", args=[self.order.order_id])
         self.assertContains(self.client.get(url), 'name="sms_code"')
         response = self.client.get(url + "?card=1")

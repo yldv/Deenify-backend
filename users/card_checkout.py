@@ -18,7 +18,7 @@ def payable(order):
 
 
 def bind_checkout_card(order, card_number, expiry, consent):
-    if (not consent or not card_number.isdigit() or not 16 <= len(card_number) <= 19
+    if (not consent or not card_number.isdigit() or len(card_number) != 16
             or not expiry.isdigit() or len(expiry) != 4 or not 1 <= int(expiry[:2]) <= 12):
         raise RenewalError("Karta ma'lumotlari va rozilikni tekshiring.")
     with transaction.atomic():
@@ -33,9 +33,6 @@ def bind_checkout_card(order, card_number, expiry, consent):
         current = ClickCardCheckout.objects.filter(order=order).first()
         if current and current.state != "awaiting_sms":
             raise RenewalError("Bu to'lov uchun qayta karta bog'lab bo'lmaydi.")
-        latest = ClickCardCheckout.objects.filter(order__user_id=order.user_id).order_by("-consent_at").first()
-        if latest and (timezone.now() - latest.consent_at).total_seconds() < 60:
-            raise RenewalError("Yangi SMS uchun 60 soniya kuting.")
         result = merchant_request("card_token/request", {
             "card_number": card_number, "expire_date": expiry, "temporary": 0,
         })

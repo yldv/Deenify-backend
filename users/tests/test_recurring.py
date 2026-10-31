@@ -166,11 +166,10 @@ class RenewalTests(TestCase):
         api.assert_not_called()
 
     @patch("users.recurring.merchant_request", return_value={"error_code": 0, "card_token": "token"})
-    def test_binding_cooldown(self, api):
+    def test_binding_can_be_requested_again_without_waiting(self, api):
         request_binding(self.order, "8600000000000000", "1228", True)
-        with self.assertRaises(RenewalError):
-            request_binding(self.order, "8600000000000000", "1228", True)
-        self.assertEqual(api.call_count, 1)
+        request_binding(self.order, "8600000000000000", "1228", True)
+        self.assertEqual(api.call_count, 2)
 
     def test_expired_enrollment_link(self):
         self.order.paid_at = timezone.now() - timedelta(days=2)

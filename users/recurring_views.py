@@ -21,7 +21,7 @@ class BindForm(forms.Form):
 
     def clean_card_number(self):
         value = re.sub(r"[\s-]", "", self.cleaned_data["card_number"])
-        if not re.fullmatch(r"[0-9]{16,19}", value):
+        if not re.fullmatch(r"[0-9]{16}", value):
             raise forms.ValidationError("Karta raqamini tekshiring.")
         return value
 

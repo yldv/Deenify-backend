@@ -59,8 +59,8 @@ form do not show that extra enrollment link.
   records. Keep normal database backups. Card-token fields must never be added
   to admin display/API responses/logging. Configure request-body logging at
   proxies/error reporting to exclude the enrollment endpoint.
-- SMS verification is limited to five attempts per binding; requesting a new
-  binding has a 60-second cooldown.
+- SMS verification is limited to five attempts per binding. New SMS binding
+  requests have no application-level cooldown. Card numbers must be 16 digits.
 
 ## Validation
 

@@ -113,7 +113,7 @@ def eligible_order(order):
 def request_binding(order, card_number, expiry, consent):
     if not consent or not eligible_order(order):
         raise RenewalError("Amaldagi pullik obuna va rozilik kerak.")
-    if not card_number.isdigit() or not 16 <= len(card_number) <= 19:
+    if not card_number.isdigit() or len(card_number) != 16:
         raise RenewalError("Karta raqamini tekshiring.")
     if len(expiry) != 4 or not expiry.isdigit():
         raise RenewalError("Karta muddati MMYY shaklida bo'lishi kerak.")
@@ -122,9 +122,6 @@ def request_binding(order, card_number, expiry, consent):
         type(order.user).objects.select_for_update().get(pk=order.user_id)
         if ClickRenewal.objects.filter(user=order.user, enabled=True).exists():
             raise RenewalError("Avval amaldagi avtouzaytirishni bekor qiling.")
-        recent = ClickRenewal.objects.filter(user=order.user).first()
-        if recent and recent.consent_at and (timezone.now() - recent.consent_at).total_seconds() < 60:
-            raise RenewalError("Yangi SMS uchun 60 soniya kuting.")
         result = merchant_request("card_token/request", {
             "card_number": card_number, "expire_date": expiry, "temporary": 0,
         })

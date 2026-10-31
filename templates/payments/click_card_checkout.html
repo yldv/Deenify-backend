@@ -55,7 +55,7 @@
           <input type="hidden" name="action" value="bind">
           <input type="hidden" name="consent" value="true">
           <div class="field-heading"><label for="card-number">Karta raqami</label><div class="card-brands" aria-label="Karta turlari"><span>Uzcard</span><span>Humo</span></div></div>
-          <div class="input-wrap"><svg aria-hidden="true"><use href="#icon-card"></use></svg><input id="card-number" name="card_number" inputmode="numeric" pattern="[0-9 ]{16,23}" maxlength="23" placeholder="0000 0000 0000 0000" required></div>
+          <div class="input-wrap"><svg aria-hidden="true"><use href="#icon-card"></use></svg><input id="card-number" name="card_number" inputmode="numeric" pattern="[0-9]{4} ?[0-9]{4} ?[0-9]{4} ?[0-9]{4}" maxlength="19" placeholder="0000 0000 0000 0000" required></div>
           <label class="expiry-label" for="card-expiry">Amal qilish muddati</label>
           <div class="input-wrap expiry-wrap"><svg aria-hidden="true"><use href="#icon-calendar"></use></svg><input id="card-expiry" name="expiry" inputmode="numeric" pattern="(0[1-9]|1[0-2])/?[0-9]{2}" maxlength="5" placeholder="MM/YY" required aria-describedby="expiry-hint"></div>
           <p class="input-hint" id="expiry-hint">Masalan: <strong>07/29</strong> — iyul, 2029</p>

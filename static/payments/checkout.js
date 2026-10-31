@@ -3,7 +3,7 @@
   const card = document.querySelector('[name="card_number"]');
   const expiry = document.querySelector('[name="expiry"]');
   if (card) card.addEventListener('input', () => {
-    const digits = card.value.replace(/\D/g, '').slice(0, 19);
+    const digits = card.value.replace(/\D/g, '').slice(0, 16);
     card.value = digits.match(/.{1,4}/g)?.join(' ') || '';
   });
   if (expiry) expiry.addEventListener('input', () => {
