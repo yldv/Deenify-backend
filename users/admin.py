@@ -61,6 +61,7 @@ class TelegramUserAdminBase(admin.ModelAdmin):
         "bot_is_active",
         "is_blocked",
         "has_active_premium",
+        "auto_renew_enabled",
         "premium_starts_at",
         "premium_expires_at",
         "last_seen_at",
@@ -68,7 +69,7 @@ class TelegramUserAdminBase(admin.ModelAdmin):
     )
     list_filter = ("language", "bot_is_active", "is_blocked", "created_at")
     search_fields = ("telegram_id", "username", "full_name", "first_name", "last_name", "phone_number")
-    readonly_fields = ("created_at", "updated_at", "last_seen_at")
+    readonly_fields = ("created_at", "updated_at", "last_seen_at", "auto_renew_enabled")
     fieldsets = (
         (
             "Telegram profil",
@@ -77,13 +78,18 @@ class TelegramUserAdminBase(admin.ModelAdmin):
         ("Aloqa", {"fields": ("phone_number",)}),
         (
             "Test va cheklovlar",
-            {"fields": ("quiz_round", "free_tests_taken", "bot_is_active", "is_blocked")},
+            {"fields": ("quiz_round", "free_tests_taken", "bot_is_active", "is_blocked", "auto_renew_enabled")},
         ),
         ("Vaqt", {"fields": ("created_at", "updated_at", "last_seen_at"), "classes": ("collapse",)}),
     )
 
     def get_queryset(self, request):
-        return super().get_queryset(request).prefetch_related("premium_subscriptions__plan")
+        return super().get_queryset(request).select_related("click_renewal").prefetch_related("premium_subscriptions__plan")
+
+    @admin.display(boolean=True, description="Avtouzaytirish", ordering="click_renewal__enabled")
+    def auto_renew_enabled(self, obj):
+        renewal = getattr(obj, "click_renewal", None)
+        return bool(renewal and renewal.enabled)
 
     @admin.display(boolean=True, description="Premium faol")
     def has_active_premium(self, obj):
