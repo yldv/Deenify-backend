@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin
 from django.utils import timezone
 
@@ -28,11 +29,39 @@ class RenewalAuditAdmin(admin.ModelAdmin):
         return False
 
 
+class RenewalScheduleForm(forms.ModelForm):
+    class Meta:
+        model = ClickRenewal
+        fields = ("next_charge_at",)
+        help_texts = {"next_charge_at": "Keyingi to'lov vaqti. Premium muddati tugamaguncha pul yechilmaydi."}
+
+    def clean(self):
+        data = super().clean()
+        if self.instance.pk and "next_charge_at" in self.changed_data:
+            # The admin change form runs in an atomic transaction. Serialize
+            # schedule edits with the worker's durable debit claim.
+            current = ClickRenewal.objects.select_for_update().get(pk=self.instance.pk)
+            if current.enabled and not data.get("next_charge_at"):
+                self.add_error("next_charge_at", "Faol avtouzaytirish uchun vaqtni kiriting.")
+            if ClickRenewalAttempt.objects.filter(renewal=current, state__in=("processing", "uncertain")).exists():
+                self.add_error("next_charge_at", "Natijasi aniqlanmagan to'lov bor. Avval uning holatini tekshiring.")
+        return data
+
+
 @admin.register(ClickRenewal)
 class ClickRenewalAdmin(RenewalAuditAdmin):
+    form = RenewalScheduleForm
     list_display = ("id", "user", "plan", "enabled", "verified", "next_charge_at")
     list_filter = ("enabled", "verified")
     fields = ("user", "plan", "amount", "period", "duration", "enabled", "verified", "consent_at", "next_charge_at")
+    readonly_fields = ("user", "plan", "amount", "period", "duration", "enabled", "verified", "consent_at")
+
+    def has_change_permission(self, request, obj=None):
+        return admin.ModelAdmin.has_change_permission(self, request, obj)
+
+    def save_model(self, request, obj, form, change):
+        if "next_charge_at" in form.changed_data:
+            obj.save(update_fields=("next_charge_at", "updated_at"))
 
 
 @admin.register(ClickRenewalAttempt)
