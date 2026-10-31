@@ -468,6 +468,10 @@ class ClickRenewal(TimeStampedModel):
     duration = models.PositiveIntegerField()
     next_charge_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
+    class Meta:
+        verbose_name = "Avtouzaytirish"
+        verbose_name_plural = "Avtouzaytirish"
+
 
 class ClickRenewalAttempt(TimeStampedModel):
     renewal = models.ForeignKey(ClickRenewal, on_delete=models.PROTECT)
